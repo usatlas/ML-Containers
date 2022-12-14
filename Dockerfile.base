@@ -19,7 +19,6 @@ RUN apt-get update && apt-get install \
 
 # for python3.6... 2.7 and 3.8 come by default
 RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt-get install python3.6 -y
 
 ###################
 #### CUDA stuff
@@ -57,7 +56,6 @@ RUN apt-get update && apt-get install -y --allow-unauthenticated \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-RUN python3.6 -m pip install --upgrade pip setuptools wheel
 RUN python3.8 -m pip install --upgrade pip setuptools wheel
 
 
