@@ -89,7 +89,9 @@ jobs:
       - name: Build Build ${{ matrix.base }} > ${{ matrix.workflow }} > ${{ matrix.facility }}
         uses: docker/build-push-action@v3
         with:
-          build-args: "BASE_IMAGE=hub.opensciencegrid.org/usatlas/af_${{ matrix.base }}_${{ matrix.workflow }}"
+          build-args: |
+            BASE_IMAGE=hub.opensciencegrid.org/usatlas/af_${{ matrix.base }}_${{ matrix.workflow }}
+            BASE=${{ matrix.base }}
           context: "{{defaultContext}}:base/workflow/af"
           file: Dockerfile.${{ matrix.facility }}
           push: true
