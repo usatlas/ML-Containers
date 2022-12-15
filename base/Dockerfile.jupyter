@@ -1,0 +1,61 @@
+
+FROM nvidia/cuda:11.4.3-devel-ubuntu20.04
+
+LABEL maintainer Ilija Vukotic <ivukotic@cern.ch>
+
+ENV DEBIAN_FRONTEND=nonintercative
+
+#################
+#### curl/wget/software-properties-common
+#################
+RUN apt-get update && apt-get install \
+    curl \
+    wget \
+    unzip \
+    zip \
+    vim \
+    rsync \
+    software-properties-common -y
+
+# for python3.6... 2.7 and 3.8 come by default
+RUN add-apt-repository ppa:deadsnakes/ppa
+
+###################
+#### CUDA stuff
+###################
+
+RUN echo "/usr/local/cuda-11.4/lib64/" >/etc/ld.so.conf.d/cuda.conf
+
+# install cudnn
+ARG OS=ubuntu2004
+ARG cudnn_version=8.2.4.15
+ARG cuda_version=cuda11.4
+
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/$OS/x86_64/cuda-$OS.pin
+RUN mv cuda-$OS.pin /etc/apt/preferences.d/cuda-repository-pin-600
+RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/$OS/x86_64/7fa2af80.pub
+RUN add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/$OS/x86_64/ /"
+RUN apt-get update && apt-get install libcudnn8=${cudnn_version}-1+${cuda_version}
+
+# make sure we have a way to bind host provided libraries
+# see https://github.com/singularityware/singularity/issues/611
+RUN mkdir -p /host-libs && \
+    echo "/host-libs/" >/etc/ld.so.conf.d/000-host-libs.conf
+
+
+RUN apt-get update && apt-get install -y --allow-unauthenticated \
+    build-essential \
+    git \
+    kmod \
+    pkg-config \
+    python3-venv \
+    python3-pip \
+    python3-dev \
+    software-properties-common \
+    && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN python3.8 -m pip install --upgrade pip setuptools wheel
+
+
