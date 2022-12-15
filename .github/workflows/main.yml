@@ -63,33 +63,34 @@ jobs:
           push: true
           tags: hub.opensciencegrid.org/usatlas/af_${{ matrix.base }}_${{ matrix.workflow }}:latest
 
-  # build_final_images:
-  #   name: Build final images
-  #   runs-on: ubuntu-latest
-  #   strategy:
-  #     matrix:
-  #       base: ["centos7", "centos9", "cuda", "jupyter"]
-  #       workflow: ["tf", "torch", "scikit", "root"]
-  #       facility: ["uc", "bnl", "slac"]
+  build_final_images:
+    name: Build final images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        base: ["centos7", "centos9", "cuda", "jupyter"]
+        workflow: ["tf"]
+        # , "torch", "scikit", "root"]
+        facility: ["uc", "bnl", "slac"]
 
-  #   needs: build_workflow_images
+    needs: build_workflow_images
 
-  #   steps:
-  #     - name: Set up Docker Buildx
-  #       uses: docker/setup-buildx-action@v2
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
-  #     - name: Log in to OSG Harbor
-  #       uses: docker/login-action@v2.1.0
-  #       with:
-  #         registry: hub.opensciencegrid.org
-  #         username: ${{ secrets.OSG_HARBOR_ROBOT_USER }}
-  #         password: ${{ secrets.OSG_HARBOR_ROBOT_PASSWORD }}
+      - name: Log in to OSG Harbor
+        uses: docker/login-action@v2.1.0
+        with:
+          registry: hub.opensciencegrid.org
+          username: ${{ secrets.OSG_HARBOR_ROBOT_USER }}
+          password: ${{ secrets.OSG_HARBOR_ROBOT_PASSWORD }}
 
-  #     - name: Build Build ${{ matrix.base }} > ${{ matrix.workflow }} > ${{ matrix.facility }}
-  #       uses: docker/build-push-action@v3
-  #       with:
-  #         build-args: "BASE_IMAGE=${{ matrix.base }}_${{ matrix.workflow }}"
-  #         context: "{{defaultContext}}:base/tf/af"
-  #         file: Dockerfile.${{ matrix.facility }}
-  #         push: true
-  #         tags: hub.opensciencegrid.org/usatlas/af_${{ matrix.base }}_${{ matrix.workflow }}_${{ matrix.facility }}:latest
+      - name: Build Build ${{ matrix.base }} > ${{ matrix.workflow }} > ${{ matrix.facility }}
+        uses: docker/build-push-action@v3
+        with:
+          build-args: "BASE_IMAGE=hub.opensciencegrid.org/usatlas/af_${{ matrix.base }}_${{ matrix.workflow }}"
+          context: "{{defaultContext}}:base/tf/af"
+          file: Dockerfile.${{ matrix.facility }}
+          push: true
+          tags: hub.opensciencegrid.org/usatlas/af_${{ matrix.base }}_${{ matrix.workflow }}_${{ matrix.facility }}:latest
