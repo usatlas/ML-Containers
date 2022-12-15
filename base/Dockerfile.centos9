@@ -1,4 +1,4 @@
-FROM centos:centos9
+FROM eurolinux/centos-stream-9
 
 # bzip2 is needed in micromamba installation
 #
