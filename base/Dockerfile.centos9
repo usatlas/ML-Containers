@@ -51,7 +51,7 @@ SHELL ["/bin/bash", "-c"]
 
 # cleanup
 RUN yum -y clean all \
-    && cd /tmp && rm -f tmp* yum.log
+    && cd /tmp && rm -rf tmp* yum.log
 
 # set PATH and LD_LIBRARY_PATH for the container
 #
