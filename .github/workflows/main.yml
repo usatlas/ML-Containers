@@ -38,7 +38,7 @@ jobs:
       - name: Build cuda base
         uses: docker/build-push-action@v3
         with:
-          context: "base"
+          context: "{{defaultContext}}:base"
           file: Dockerfile.cuda
           push: true
           tags: hub.opensciencegrid.org/usatlas/af_cuda:latest
@@ -53,7 +53,7 @@ jobs:
       - name: Build cuda-tf
         uses: docker/build-push-action@v2.2.0
         with:
-          context: "base/tf"
+          context: "{{defaultContext}}:base/tf"
           file: Dockerfile.cuda-tf
           push: true
           tags: hub.opensciencegrid.org/usatlas/af_cuda_tf:latest
@@ -68,7 +68,7 @@ jobs:
       - name: Build base-tf-uc
         uses: docker/build-push-action@v2.2.0
         with:
-          context: "base/tf/af-uc"
+          context: "{{defaultContext}}:base/tf/af-uc"
           file: Dockerfile.cuda-tf-uc
           push: true
           tags: hub.opensciencegrid.org/usatlas/af_cuda_tf_uc:latest
