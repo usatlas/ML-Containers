@@ -1,5 +1,6 @@
-FROM nvidia/cuda:11.4.3-devel-ubuntu20.04
+ARG BASE_IMAGE=alpine:latest
+FROM $BASE_IMAGE
 
 LABEL maintainer Ilija Vukotic <ivukotic@cern.ch>
 
-RUN echo "BASE > TF > UC"
+RUN echo "$BASE_IMAGE > UC"

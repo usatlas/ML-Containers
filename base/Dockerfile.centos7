@@ -1,61 +1,65 @@
+FROM centos:centos7
 
-FROM nvidia/cuda:11.4.3-devel-ubuntu20.04
+# bzip2 is needed in micromamba installation
+#
+RUN yum -y install which file git bzip2
 
-LABEL maintainer Ilija Vukotic <ivukotic@cern.ch>
+# path prefix for micromamba to install pkgs into
+#
+ARG prefix=/opt/micromamba
 
-ENV DEBIAN_FRONTEND=nonintercative
+# Install micromamba
+#
+RUN mkdir -p $prefix \
+    && chmod uog+rxw $prefix \
+    && export PREFIXLOCATION=$prefix \
+    && curl micro.mamba.pm/install.sh | sed '0,/PREFIXLOCATION=/{/PREFIXLOCATION=/d}' | bash \
+    && echo "micromamba activate" >> ~/.bashrc \
+    && source ~/.bashrc
 
-#################
-#### curl/wget/software-properties-common
-#################
-RUN apt-get update && apt-get install \
-    curl \
-    wget \
-    unzip \
-    zip \
-    vim \
-    rsync \
-    software-properties-common -y
+# ensure the ~/.bashrc is sourced in the remaining Dockerfile lines
+#
+SHELL ["/bin/bash", "--login", "-c"]
 
-# for python3.6... 2.7 and 3.8 come by default
-RUN add-apt-repository ppa:deadsnakes/ppa
+# install python38
+#
+# make /root accessible in Singularity
+#
+RUN mkdir -p $prefix \
+    && chmod uog+rxw $prefix \
+    && export PREFIXLOCATION=prefix \
+    && micromamba install -c conda-forge -y -p $prefix python=3.8 \
+    && micromamba clean -y -a
 
-###################
-#### CUDA stuff
-###################
+# install jupyterlab, uproot, pandas, scikit-learn,
+#         seaborn, plotly_express
+#
+#  (numpy, scipy, akward, matplotlib and plotly will 
+#   be installed as dependencies)
+#
+RUN micromamba install -c conda-forge -y -p $prefix \
+    jupyterlab uproot pandas scikit-learn seaborn plotly_express \
+    && micromamba clean -y -a
 
-RUN echo "/usr/local/cuda-11.4/lib64/" >/etc/ld.so.conf.d/cuda.conf
+# print out the package list into file /00Readme.txt
+#
+RUN micromamba activate \
+    && micromamba list |sed '1,2d' |tr -s ' ' |cut -d ' ' --fields=2,3 > /00Readme.txt \
+    && yum list installed | egrep "^(which|file|git|bzip2)\." | tr -s ' ' |cut -d ' ' --fields=1,2 >> /00Readme.txt
 
-# install cudnn
-ARG OS=ubuntu2004
-ARG cudnn_version=8.2.4.15
-ARG cuda_version=cuda11.4
+SHELL ["/bin/bash", "-c"]
 
-RUN wget https://developer.download.nvidia.com/compute/cuda/repos/$OS/x86_64/cuda-$OS.pin
-RUN mv cuda-$OS.pin /etc/apt/preferences.d/cuda-repository-pin-600
-RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/$OS/x86_64/7fa2af80.pub
-RUN add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/$OS/x86_64/ /"
-RUN apt-get update && apt-get install libcudnn8=${cudnn_version}-1+${cuda_version}
+# cleanup
+RUN yum -y clean all \
+    && cd /tmp && rm -f tmp* yum.log
 
-# make sure we have a way to bind host provided libraries
-# see https://github.com/singularityware/singularity/issues/611
-RUN mkdir -p /host-libs && \
-    echo "/host-libs/" >/etc/ld.so.conf.d/000-host-libs.conf
+# set PATH and LD_LIBRARY_PATH for the container
+#
+ENV PATH=${prefix}/bin:/usr/local/bin:/usr/bin \
+    LD_LIBRARY_PATH=${prefix}/lib:/usr/lib64
 
+# copy setup script and readme file
+#
+COPY ./setup-on-host.sh /
 
-RUN apt-get update && apt-get install -y --allow-unauthenticated \
-    build-essential \
-    git \
-    kmod \
-    pkg-config \
-    python3-venv \
-    python3-pip \
-    python3-dev \
-    software-properties-common \
-    && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN python3.8 -m pip install --upgrade pip setuptools wheel
-
-
+CMD ["/bin/bash"]
