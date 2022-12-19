@@ -3,4 +3,6 @@ FROM $BASE_IMAGE
 
 LABEL maintainer Shuwei
 
+RUN yum -y install tcsh
+
 RUN echo "$BASE_IMAGE > BNL"
