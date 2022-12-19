@@ -1,1 +1,1 @@
-echo -e "\nFor the content in this container,\n  please read the file /00Readme.txt\n"
+echo -e "\nFor the content in this container,\n  please read the file /list-of-pkgs-inside.txt\n"
