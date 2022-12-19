@@ -12,9 +12,9 @@ COPY uc_shim.sh /user/local/sbin/
 RUN if [ "$BASE" = "centos7" ]; \
     then \
     yum install https://research.cs.wisc.edu/htcondor/repo/current/htcondor-release-current.el7.noarch.rpm -y \
-    yum install htcondor \
+    && yum install htcondor; \
     else \
-    apt-add-repository deb [arch=amd64] http://research.cs.wisc.edu/htcondor/repo/ubuntu/current focal main \
+    apt-add-repository deb [arch=amd64] http://research.cs.wisc.edu/htcondor/repo/ubuntu/current focal main; \
     fi 
 
 RUN echo "$BASE_IMAGE > UC"
