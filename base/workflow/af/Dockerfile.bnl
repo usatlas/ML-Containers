@@ -4,6 +4,8 @@ FROM $BASE_IMAGE
 LABEL maintainer Shuwei
 
 ENV LD_LIBRARY_PATH=/usr/lib64
-RUN yum -y install tcsh
+RUN if grep "centos" /etc/os-release; then \
+       yum -y install tcsh; \
+    fi
 
 RUN echo "$BASE_IMAGE > BNL"
