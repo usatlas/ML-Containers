@@ -9,7 +9,7 @@ LABEL maintainer Ilija Vukotic <ivukotic@cern.ch>
 COPY uc_shim.sh /user/local/sbin/
 
 # add condor libs
-RUN RUN LD_LIBRARY_PATH= && if [ "$BASE" = "centos7" ]; then \
+RUN LD_LIBRARY_PATH= && if [ "$BASE" = "centos7" ]; then \
        yum -y install https://research.cs.wisc.edu/htcondor/repo/current/htcondor-release-current.el7.noarch.rpm \
        && yum -y install htcondor; \
     else \
