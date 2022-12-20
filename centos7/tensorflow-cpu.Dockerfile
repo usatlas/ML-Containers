@@ -70,7 +70,7 @@ ENV LD_LIBRARY_PATH=/usr/lib64
 # copy setup script and readme file
 #
 COPY ./setup-on-host.sh test-tensorflow-with-cpu.py /
-COPY ./printme.sh ./printme.csh /etc/profile.d/
+COPY ./printme.sh /etc/profile.d/
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod 755 /entrypoint.sh
