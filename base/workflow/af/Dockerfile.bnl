@@ -3,6 +3,7 @@ FROM $BASE_IMAGE
 
 LABEL maintainer Shuwei
 
-RUN LD_LIBRARY_PATH= yum -y install tcsh
+ENV LD_LIBRARY_PATH=/usr/lib64
+RUN yum -y install tcsh
 
 RUN echo "$BASE_IMAGE > BNL"
