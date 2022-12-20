@@ -36,7 +36,7 @@ RUN micromamba install -c conda-forge -y python=3.8 \
 
 # cleanup
 #
-RUN cd /tmp && rm -f tmp* yum.log
+RUN cd /tmp && rm -rf tmp* yum.log
 
 # print out the package list into file /list-of-pkgs-inside.txt
 #
