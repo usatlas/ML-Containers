@@ -26,7 +26,7 @@ jobs:
           password: ${{ secrets.OSG_HARBOR_ROBOT_PASSWORD }}
 
       - name: Cache Docker layers
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-buildx-dev-${{ matrix.base }}
@@ -35,7 +35,7 @@ jobs:
             # ${{ runner.os }}-buildx-dev
 
       - name: "Build ${{ matrix.base }} base"
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           context: "{{defaultContext}}:base"
           file: Dockerfile.${{matrix.base}}
@@ -68,7 +68,7 @@ jobs:
           password: ${{ secrets.OSG_HARBOR_ROBOT_PASSWORD }}
 
       - name: Cache Docker layers
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-buildx-dev-${{ matrix.base }}-${{ matrix.workflow }}
@@ -77,7 +77,7 @@ jobs:
             ${{ runner.os }}-buildx-dev-${{ matrix.base }}
 
       - name: Build ${{ matrix.base }} > ${{ matrix.workflow }}
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           build-args: "BASE_IMAGE=hub.opensciencegrid.org/usatlas/af_${{ matrix.base }}"
           context: "{{defaultContext}}:base/workflow"
@@ -112,7 +112,7 @@ jobs:
           password: ${{ secrets.OSG_HARBOR_ROBOT_PASSWORD }}
 
       - name: Cache Docker layers
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-buildx-dev-${{ matrix.base }}-${{ matrix.workflow }}-${{ matrix.facility }}
@@ -122,7 +122,7 @@ jobs:
             ${{ runner.os }}-buildx-dev-${{ matrix.base }}
 
       - name: Build Build ${{ matrix.base }} > ${{ matrix.workflow }} > ${{ matrix.facility }}
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           build-args: |
             BASE_IMAGE=hub.opensciencegrid.org/usatlas/af_${{ matrix.base }}_${{ matrix.workflow }}
