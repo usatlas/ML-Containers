@@ -69,6 +69,15 @@ jobs:
           username: ${{ secrets.OSG_HARBOR_ROBOT_USER }}
           password: ${{ secrets.OSG_HARBOR_ROBOT_PASSWORD }}
 
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-dev-${{ matrix.base }}-${{ matrix.workflow }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-dev-${{ matrix.base }}-${{ matrix.workflow }}
+            ${{ runner.os }}-buildx-dev-${{ matrix.base }}
+
       - name: Build ${{ matrix.base }} > ${{ matrix.workflow }}
         uses: docker/build-push-action@v3
         with:
