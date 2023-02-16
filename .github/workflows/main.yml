@@ -32,8 +32,6 @@ jobs:
           file: Dockerfile.${{matrix.base}}
           push: true
           tags: hub.opensciencegrid.org/usatlas/af_${{matrix.base}}:latest
-          cache-from: type=${{ format('registry,ref=hub.opensciencegrid.org/usatlas/af/basecache',steps.extract_cache_name.outputs.cachetag) }}
-          cache-to: type=${{ format('registry,ref=hub.opensciencegrid.org/usatlas/af/basecache',steps.extract_cache_name.outputs.cachetag) }},mode=max
 
   build_workflow_images:
     name: Build workflow images
@@ -68,8 +66,6 @@ jobs:
           file: Dockerfile.${{ matrix.workflow }}
           push: true
           tags: hub.opensciencegrid.org/usatlas/af_${{ matrix.base }}_${{ matrix.workflow }}:latest
-          cache-from: type=${{ format('registry,ref=hub.opensciencegrid.org/usatlas/af_${{matrix.workflow}}/wfcache',steps.extract_cache_name.outputs.cachetag) }}
-          cache-to: type=${{ format('registry,ref=hub.opensciencegrid.org/usatlas/af_${{matrix.workflow}}/wfcache',steps.extract_cache_name.outputs.cachetag) }},mode=max
 
   build_final_images:
     name: Build final images
@@ -105,5 +101,3 @@ jobs:
           file: Dockerfile.${{ matrix.facility }}
           push: true
           tags: hub.opensciencegrid.org/usatlas/af_${{ matrix.base }}_${{ matrix.workflow }}_${{ matrix.facility }}:latest
-          cache-from: type=${{ format('registry,ref=hub.opensciencegrid.org/usatlas/af_${{matrix.facility}}/finalcache',steps.extract_cache_name.outputs.cachetag) }}
-          cache-to: type=${{ format('registry,ref=hub.opensciencegrid.org/usatlas/af_${{matrix.facility}}/finalcache',steps.extract_cache_name.outputs.cachetag) }},mode=max
