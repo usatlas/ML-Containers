@@ -86,6 +86,8 @@ jobs:
           file: Dockerfile.${{ matrix.workflow }}
           push: true
           tags: hub.opensciencegrid.org/usatlas/af_${{ matrix.base }}_${{ matrix.workflow }}:latest
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache
 
   build_final_images:
     name: Build final images
@@ -111,6 +113,16 @@ jobs:
           username: ${{ secrets.OSG_HARBOR_ROBOT_USER }}
           password: ${{ secrets.OSG_HARBOR_ROBOT_PASSWORD }}
 
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-dev-${{ matrix.base }}-${{ matrix.workflow }}-${{ matrix.facility }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-dev-${{ matrix.base }}-${{ matrix.workflow }}-${{ matrix.facility }}
+            ${{ runner.os }}-buildx-dev-${{ matrix.base }}-${{ matrix.workflow }}
+            ${{ runner.os }}-buildx-dev-${{ matrix.base }}
+
       - name: Build Build ${{ matrix.base }} > ${{ matrix.workflow }} > ${{ matrix.facility }}
         uses: docker/build-push-action@v3
         with:
@@ -121,3 +133,5 @@ jobs:
           file: Dockerfile.${{ matrix.facility }}
           push: true
           tags: hub.opensciencegrid.org/usatlas/af_${{ matrix.base }}_${{ matrix.workflow }}_${{ matrix.facility }}:latest
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache
