@@ -25,6 +25,15 @@ jobs:
           username: ${{ secrets.OSG_HARBOR_ROBOT_USER }}
           password: ${{ secrets.OSG_HARBOR_ROBOT_PASSWORD }}
 
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-dev-${{ matrix.base }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-dev-${{ matrix.base }} 
+            # ${{ runner.os }}-buildx-dev
+
       - name: "Build ${{ matrix.base }} base"
         uses: docker/build-push-action@v3
         with:
@@ -32,6 +41,8 @@ jobs:
           file: Dockerfile.${{matrix.base}}
           push: true
           tags: hub.opensciencegrid.org/usatlas/af_${{matrix.base}}:latest
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache
 
   build_workflow_images:
     name: Build workflow images
