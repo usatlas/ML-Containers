@@ -1,10 +1,11 @@
+# FROM opensciencegrid/osg-wn:3.6-release-el7 as osg-wn36
 FROM centos:centos7
 
 # bzip2 is needed in micromamba installation
 #
 RUN yum -y install which file git bzip2 \
     && yum -y clean all \
-    && cd /tmp && rm -f tmp* yum.log
+    && rm -rf /tmp/tmp* /tmp/yum.log /var/cache/yum/*
 
 # path prefix for micromamba to install pkgs into
 #
@@ -21,27 +22,25 @@ RUN curl -L https://micromamba.snakepit.net/api/micromamba/linux-64/$Micromamba_
     && mkdir -p $prefix && chmod a+rx $prefix \
     && echo "source /usr/local/bin/_activate_current_env.sh" >> ~/.bashrc
 
-# install python38
+# make visible all executables in conda base env
+ENV PATH=${prefix}/bin:${PATH}
+
+# install python39
 #
-# install uproot, pandas, scikit-learn,
-#         seaborn, plotly_express
 #
-#  (numpy, scipy, akward, matplotlib and plotly will 
-#   be installed as dependencies)
-#
-RUN micromamba install -c conda-forge -y python=3.8 \
-    uproot pandas scikit-learn seaborn plotly_express \
+RUN micromamba install -c conda-forge -y python=3.9.14 \
     && micromamba clean -y -a -f
 
-# install jupyterlab individually
-# because installing jupyterlab with other pkgs would be stuck forever
+# install osg-wn-client
 #
-RUN micromamba install -c conda-forge -y jupyterlab \
-    && micromamba clean -y -a -f
-
-# install Gradient Boosting pkgs: lightgbm xgboost catboost
-RUN micromamba install -c conda-forge -y lightgbm xgboost catboost \
-    && micromamba clean -y -a -f
+ARG OSG_REL=3.6
+RUN yum -y install https://repo.opensciencegrid.org/osg/${OSG_REL}/osg-${OSG_REL}-el7-release-latest.rpm \
+    epel-release \
+    && yum -y install osg-wn-client \
+    && yum -y remove "python3*" "xrootd*" "gfal2*" \
+       wget stashcp epel-release \
+    && yum -y clean all \
+    && rm -rf /tmp/tmp* /tmp/yum.log /var/cache/yum/*
 
 # install the latest ROOT (PyROOT is included)
 #
@@ -53,39 +52,50 @@ RUN micromamba install -c conda-forge -y ROOT \
 #
 RUN yum install -y libGL \
     && yum -y clean all \
-    && cd /tmp && rm -f tmp* yum.log
+    && rm -rf /tmp/tmp* /tmp/yum.log /var/cache/yum/*
 
-# some users may use tcsh in jupyter terminal
-#
-RUN micromamba install -c conda-forge -y tcsh \
-    && ln -s $prefix/bin/tcsh /bin/tcsh \
+# install pipenv (python package/virtualenv manager)
+#         and resample==1.5.3 (needed in scikit-hep
+RUN micromamba install -c conda-forge -y pipenv resample==1.5.3 \
     && micromamba clean -y -a -f
+
+# install scikit-hep, pyAMI, and Rucio
+RUN pip install scikit-hep panda-client rucio-clients-atlas pyAMI_atlas \
+    && rm -rf /root/.cache
 
 # print out the package list into file /list-of-pkgs-inside.txt
 #
-RUN micromamba list |sed '1,2d' |tr -s ' ' |cut -d ' ' --fields=2,3 > /list-of-pkgs-inside.txt \
-    && yum list installed | egrep "^(which|file|git|bzip2)\." | \
-       tr -s ' ' |cut -d ' ' --fields=1,2 >> /list-of-pkgs-inside.txt
+RUN micromamba list |sed '1,2d' \
+                    |tr -s ' ' |cut -d ' ' --fields=2,3 > /tmp/a.txt \
+    && yum list installed |sed '1,2d' \
+                    |tr -s ' ' |cut -d ' ' --fields=1,2 >> /tmp/a.txt \
+    && pip list |sed '1,2d' \
+                    |tr -s ' ' |cut -d ' ' --fields=1,2 >> /tmp/a.txt \
+    && awk 'NR<3{print $0;next}{print $0| "sort -u"}' /tmp/a.txt \
+                    > /list-of-pkgs-inside.txt \
+    && rm -f /tmp/a.txt
 
 # Remove *all* writable package caches
 # RUN micromamba clean -y -a -f
 
 # set PATH and LD_LIBRARY_PATH for the container
 #
-ENV PATH=${prefix}/bin:${PATH} \
-    LD_LIBRARY_PATH=/usr/lib64
+# ENV PATH=${prefix}/bin:${PATH} \
+ENV LD_LIBRARY_PATH=/usr/lib64 \
+    PANDA_SYS=$prefix \
+    RUCIO_HOME=$prefix
 
 # Demonstrate the environment is set up
 #
-RUN echo "Make sure PyROOT is installed:" \
+RUN echo "Make sure PyROOT/Panda/Rucio are installed:" \
     && python --version \
-    && python -c "import ROOT; print(ROOT.gROOT.GetVersion())"
+    && python -c "import ROOT; import rucio.client; import pandaclient"
 
 # creat/gtar a temporary new env
 COPY ./gtar-newEnv-on-base.sh /tmp/
 RUN  chmod +x /tmp/gtar-newEnv-on-base.sh \
      && /tmp/gtar-newEnv-on-base.sh \
-     && rm -f /tmp/gtar-newEnv-on-base.sh
+     && rm -rf /tmp/*
 
 # copy setup script and readme file
 #
