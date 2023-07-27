@@ -46,7 +46,7 @@ The corresponding Dockerfiles and shell scripts are hosted on the following GitH
 
 To build a Docker image, says, *ml-base*, just run the following command
 ```shell
-docker build -t ml-base -f ml-base.Dockerfile .
+docker build --build-arg PyVer=3.8 -t ml-base -f ml-base.Dockerfile .
 ```
 
 We would tag it to "centos7-python38" for CentOS7-based image with python-3.8, or "alma9-python39" for Alma9-based image with python-3.9. For example
@@ -58,7 +58,7 @@ We would tag it to "centos7-python38" for CentOS7-based image with python-3.8, o
 
 The above command pushes the image onto [the Docker hub](https://hub.docker.com/) under the personal account of *yesw2000*.
 
-# Deployment of Singularity Image onto CVMFS
+# Deployment of Singularity Images onto CVMFS
 
 The ML images are deployed onto both BNL CVMFS and CVMFS-unpacked in Singularity sandbox format.
 
