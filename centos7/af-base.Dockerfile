@@ -8,8 +8,9 @@ RUN yum -y install which file bzip2 \
 
 # path prefix for micromamba to install pkgs into
 #
-ARG prefix=/opt/conda
+ARG prefix=/opt/conda_jupyter
 ARG Micromamba_ver=1.3.0
+ARG PyVer=3.8
 ARG Mamba_exefile=bin/micromamba
 ENV MAMBA_EXE=/$Mamba_exefile MAMBA_ROOT_PREFIX=$prefix CONDA_PREFIX=$prefix
 
@@ -24,29 +25,45 @@ RUN curl -L https://micromamba.snakepit.net/api/micromamba/linux-64/$Micromamba_
 # install python38
 #
 #
-RUN micromamba install -c conda-forge -y python=3.8 \
+RUN micromamba install -c conda-forge -y python=$PyVer \
     && cd $prefix && ln -s bin condabin \
     && micromamba clean -y -a -f
 
 # install jupyterlab/jupyterhub individually
 # because installing jupyterlab with other pkgs would be stuck forever
 #
+# Removed jupyterhub, because it conflicts the one at BNL
+#
 # And click, needed by jupyter-events
 #
 RUN micromamba install -c conda-forge -y \
-               jupyterlab jupyterhub batchspawner click\
+               jupyterlab click\
+    && cd $prefix/bin && sed -i "1,3 s%${PWD}/python.*%/usr/bin/env python3%" \
+       $(file * | grep "script" | cut -d: -f1) \
+    && cd $prefix \
+    && sed -i 's#".*bin/python.*"#"python3"#' share/jupyter/kernels/python3/kernel.json \
+    && cd $prefix/share/jupyter/kernels \
+    && cp -pR python3 container-python3 \
+    && rm -f container-python3/kernel.json \
     && micromamba clean -y -a -f
 
 # install pipenv (python package/virtualenv manager)
-RUN micromamba install -c conda-forge -y pipenv \
-    && micromamba clean -y -a -f
+# RUN micromamba install -c conda-forge -y pipenv \
+#    && micromamba clean -y -a -f
 
 
 # install htcondor and slurm
 # moved them into the top site-specific containers
 #
-# RUN micromamba install -c conda-forge -y htcondor slurm \
-#    && micromamba clean -y -a -f
+RUN micromamba install -c conda-forge -y htcondor slurm \
+    && cd $prefix/bin && sed -i "1,3 s%${PWD}/python.*%/usr/bin/env python3%" \
+       $(file * | grep "script" | cut -d: -f1) \
+    && micromamba clean -y -a -f
+
+# install singularity
+#   to allow running another inner container
+RUN micromamba install -c conda-forge -y singularity \
+    && micromamba clean -y -a -f
 
 # print out the package list into file /list-of-pkgs-inside.txt
 #
@@ -60,12 +77,22 @@ RUN micromamba list |sed '1,2d' |tr -s ' ' |cut -d ' ' --fields=2,3 > /tmp/a.txt
 #
 ENV PATH=${prefix}/bin:${PATH} \
     LD_LIBRARY_PATH=/usr/lib64 \
-    PYTHONPATH=$prefix/lib/python3.8:$prefix/lib/python3.8/site-packages
+    JUPYTERLAB_DIR=${prefix}/share/jupyter/lab \
+    JUPYTER_PATH=${prefix}/share/jupyter \
+    SHELL=/bin/bash
+
+    PYTHONPATH=$prefix/lib/python${PyVer}/site-packages \
+
+
+# copy the special Jupyter kernel
+COPY ./container-kernel.json $prefix/share/jupyter/kernels/container-python3/kernel.json
+COPY ./singularity-jupyter.sh $prefix/bin/
+RUN chmod 755 $prefix/bin/singularity-jupyter.sh
 
 # copy setup script and readme file
 #
 # COPY ./setup-on-host.sh ./create-newEnv-on-base.sh /
-COPY ./printme.sh /etc/profile.d/
+COPY ./printme-af.sh /etc/profile.d/printme.sh
 
 # Singularity
 RUN mkdir -p /.singularity.d/env \

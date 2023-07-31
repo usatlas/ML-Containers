@@ -7,7 +7,7 @@ source /usr/local/bin/_activate_current_env.sh
 # source /printme.sh
 
 # Hand off to the CMD
-if [ "$@" == "/bin/bash" ]; then
+if [[ "X$1" =~ X.*bash ]]; then
    CMD="$@ -rcfile /usr/local/bin/_activate_current_env.sh"
    eval "set $CMD"
 fi

@@ -1,20 +1,19 @@
-CondaRoot=/opt/conda
+PROGNAME=$BASH_SOURCE
 
-PROGNAME=$0
 usage()
 {
   cat << EO
         Create a new env on top of the existing base env
 
-        Usage: $PROGNAME -h|--help
-               $PROGNAME -n|--name newEnvName -r|--root-prefix prefixRoot
+        Usage: source $PROGNAME -h|--help
+               source $PROGNAME -n|--name newEnvName -r|--root-prefix prefixRoot
 EO
 }
 
 if [ $BASH_SOURCE == $0 ]; then
    echo "DO NOT run this script, please _source_  $PROGNAME instead"
    usage
-   exit 1
+   return 1
 fi
 
 while (( "$#" )); do
@@ -48,6 +47,13 @@ while (( "$#" )); do
   esac
 done
 
+CondaRoot=$MAMBA_ROOT_PREFIX
+[ "X$CondaRoot" == "X" ] && CondaRoot=$CONDA_PREFIX
+if [ "X$CondaRoot" == "X" ]; then
+   echo "Neither envvar MAMBA_ROOT_PREFIX nor CONDA_PREFIX is found, exit now"
+   return 1
+fi
+
 if [ "$newEnvName" == "" -o "$prefixRoot" == "" ]; then
    echo "missing newEnvName or prefixRoot"
    usage
@@ -74,13 +80,14 @@ fi
 
 curDir=$PWD
 cd $envDir
+ln -s $CONDA_PREFIX baseEnv_dir
 gtar xfz $CondaRoot/newEnv-base.tgz
 
-cd bin/
-cp -p $(echo /opt/conda/bin/python*.[0-9] | tail -1) ./
-ln -s python*.[0-9] python3
-ln -s python3 python
+cat > pyvenv.cfg <<EOF
+home = $CONDA_PREFIX/bin
+include-system-site-packages = true
+version = $(python3 --version | cut -d' ' -f2)
+EOF
 
 cd $curDir
-
 micromamba activate $envDir
