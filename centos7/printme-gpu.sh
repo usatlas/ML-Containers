@@ -1,7 +1,7 @@
 echo -e "\nFor the content in this container,\n  please read the file /list-of-pkgs-inside.txt\n"
 
 libCUDA=""
-if [[ "X$SINGULARITY_CONTAINER" != "X" ]]; then
+if [[ -e /singularity ]]; then
    libCUDA=$(ls /.singularity.d/libs/libcuda.so 2>/dev/null)
 else
    libCUDA=$(ls /usr/local/nvidia/lib64/libcuda.so /usr/local/cuda/lib64/libcuda.so 2>/dev/null)
