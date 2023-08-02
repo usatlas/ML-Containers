@@ -88,10 +88,10 @@ RUN echo "Make sure numpy is installed:" \
     && python -c "import numpy as np; print(np.__version__)"
 
 # creat/gtar a temporary new env
-COPY ./gtar-newEnv-on-base3.sh /tmp/
-RUN  chmod +x /tmp/gtar-newEnv-on-base3.sh \
-     && /tmp/gtar-newEnv-on-base3.sh \
-     && rm -f /tmp/gtar-newEnv-on-base3.sh
+COPY ./gtar-newEnv-on-base.sh /tmp/
+RUN  chmod +x /tmp/gtar-newEnv-on-base.sh \
+     && /tmp/gtar-newEnv-on-base.sh \
+     && rm -f /tmp/gtar-newEnv-on-base.sh
 
 # copy setup script and readme file
 #
