@@ -48,7 +48,7 @@ RUN micromamba install -y jupyterlab click \
        $(file bin/* | grep "script" | cut -d: -f1) \
     && cd $prefix/share/jupyter/kernels \
     && sed -i -e 's%: ".*(ipykernel)"%: "ML-Python3"%' \
-              -e 's#".*bin/python.*"#"/usr/bin/env", "python'${PyVer}'", "-I"#' python3/kernel.json \
+              -e 's#".*bin/python.*"#"/usr/bin/env", "python'${PyVer}'", "-s"#' python3/kernel.json \
     && micromamba clean -y -a -f
 
 # install Gradient Boosting pkgs: lightgbm xgboost catboost
