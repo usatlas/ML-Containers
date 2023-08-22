@@ -9,20 +9,12 @@ if [ "${myDir}" = "/" ]; then
    return 0
 fi
 
-if [ "X$MAMBA_EXE" = "X" ]; then
-   \which micromamba >/dev/null 2>&1
-   if [ $? -ne 0 ]; then
-      export MAMBA_EXE=$myDir/bin/micromamba
-   else
-      export MAMBA_EXE=$(\which micromamba)
-   fi
-fi
+export MAMBA_EXE=$myDir/bin/micromamba
 
 shellName=$(readlink /proc/$$/exe | awk -F "[/-]" '{print $NF}')
 typeset -f micromamba >/dev/null || eval "$($MAMBA_EXE shell hook --shell=$shellName)"
 
 # activate the env
-unset PYTHONHOME
 CondaDir=/opt/conda
 export CONDA_PREFIX=$myDir${CondaDir}
 if [ ! -d $CONDA_PREFIX ]; then
@@ -34,3 +26,10 @@ if [ -d $CONDA_PREFIX/share/jupyter ]; then
    export JUPYTER_PATH=$CONDA_PREFIX/share/jupyter
 fi
 micromamba activate
+
+unset PYTHONHOME
+
+if [ "${CondaDir}" != "" ]; then
+   export EnvTopDir=$myDir
+   echo -e '\nTo create your own new env, run "source $EnvTopDir/create-newEnv-on-base.sh -h" for help'
+fi
