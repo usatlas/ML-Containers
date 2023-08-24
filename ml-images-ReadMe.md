@@ -179,10 +179,10 @@ The python option ""**-s**"" is used to ignore user site directory under *$HOME/
 
 Meanwhile, the images also add another python3 kernel **ML-Python3-usersite**, providing an option to use user site directory in Jupyter notebook.
 
-A screenshot of the Jupter launch at BNL is enclosed below, which shows the two available options of 
+A screenshot of the Jupter launcher at BNL is enclosed below, which shows the two available options of 
 **ML-Python3** and **ML-Python3-usersite** for Console and Notebook.
 
-![screen of BNL Jupyter Launch](BNL-Jupyter-Launch.png)
+![screen of BNL Jupyter Launcher](BNL-Jupyter-Launch.png)
 
 
 ## Extension of ML Image Envs
