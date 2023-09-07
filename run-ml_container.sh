@@ -181,10 +181,14 @@ def list_packages(args):
 
 # write setup for Singularity sandbox
 def write_sandboxSetup(filename, imageName, dockerPath, sandboxPath, runOpt):
+    imageSize, lastUpdate, imageDigest = get_imageInfo(None, imageName, False)
     myScript =  os.path.abspath(sys.argv[0])
     shellFile = open(filename, 'w')
     shellFile.write("""
 imageName=%s
+imageCompressedSize=%s
+lastUpdate=%s
+imageDigest=%s
 dockerPath=%s
 sandboxPath=%s
 runOpt="%s"
@@ -197,14 +201,34 @@ else
    echo "Please rebuild the Singularity sandbox by running the following"
    echo -e "\n\t source %s $imageName"
 fi
-""" % (imageName, dockerPath, sandboxPath, runOpt, myScript) )
+""" % (imageName, imageSize, lastUpdate, imageDigest, dockerPath, sandboxPath, runOpt, myScript) )
     shellFile.close()
 
 
 # write setup for Docker/Podman container
-def write_dockerSetup(filename, dockerPath, contCmd, contName):
+def write_dockerSetup(filename, imageName, dockerPath, contCmd, contName, override=False):
+    imageSize, lastUpdate, imageDigest = get_imageInfo(None, imageName, False)
+    if override:
+       status, out = getstatusoutput("%s ps -a -f name='^%s$' | tail -1" % (contCmd, contName) )
+       if out.find(contName) > 0:
+          if re.search("ago\s+(Up|Exited)", out):
+             print("\nThe container=%s already exists, removing it first" % contName)
+             if re.search("ago\s+Up", out):
+                status, out = getstatusoutput("%s stop %s" % (contCmd, contName) )
+                if status != 0:
+                   print("!!Error!! Failed in stopping the container=%s" % contName)
+                   sys.exit(1)
+             status, out = getstatusoutput("%s rm %s" % (contCmd, contName) )
+             if status != 0:
+                print("!!Error!! Failed in removing the container=%s" % contName)
+                sys.exit(1)
+
     shellFile = open(filename, 'w')
     shellFile.write("""
+imageName=%s
+imageCompressedSize=%s
+lastUpdate=%s
+imageDigest=%s
 imagePath=%s
 contCmd=%s
 contName=%s
@@ -216,25 +240,25 @@ listOut=$($contCmd ps -a -f name='^'$contName'$' 2>/dev/null | tail -1)
 if [[ "$listOut" =~ $re_exited ]]; then
    startCmd="$contCmd start $contName"
    echo -e "\n$startCmd\n"
-   eval $startCmd
+   eval $startCmd >/dev/null
 elif [[ "$listOut" =~ $re_up ]]; then
    if [[ "$listOut" =~ "(Paused)" ]]; then
       unpauseCmd="$contCmd unpause $contName"
       echo -e "\n$unpauseCmd\n"
-      eval $unpauseCmd
+      eval $unpauseCmd >/dev/null
    fi
 else
-   createCmd="$contCmd create -it --name $contName $imagePath"
+   createCmd="$contCmd create -it -v $PWD:$PWD -w $PWD --name $contName $imagePath"
    echo -e "\\n$createCmd\\n"
-   eval $createCmd
+   eval $createCmd >/dev/null
    startCmd="$contCmd start $contName"
    echo -e "\n$startCmd\n"
-   eval $startCmd
+   eval $startCmd >/dev/null
 fi
 runCmd="$contCmd exec -it $contName /bin/bash"
 echo -e "\\n$runCmd\\n"
 eval $runCmd
-""" % (dockerPath, contCmd, contName) )
+""" % (imageName, imageSize, lastUpdate, imageDigest, dockerPath, contCmd, contName) )
     shellFile.close()
 
 
@@ -250,6 +274,7 @@ def setup_image(args):
        pp = pprint.PrettyPrinter(indent=4)
        pp.pprint(images)
     imageFullName = images[0]
+
     (imageName, tagName) = imageFullName.split(':')
     dockerPath = IMAGE_CONFIG[imageFullName]["dockerPath"].replace("{FullName}",imageFullName)
     print("Found the image name=",imageFullName," with the dockerPath=",dockerPath)
@@ -280,6 +305,11 @@ def setup_image(args):
           os.mkdir("singularity")
        sandboxPath = "singularity/%s" % imageFullName
        if os.path.exists(sandboxPath):
+          if not args.force and os.path.exists(sandboxPath + "/entrypoint.sh"):
+             print("%s already, and would not override it." % sandboxPath)
+             print("\nTo override the existing sandbox, please add the option '-f'")
+             print("Quit now")
+             sys.exit(1)
           os.system("chmod -R +w %s; rm -rf %s" % (sandboxPath, sandboxPath) )
        buildCmd = "singularity build --sandbox -F %s docker://%s" % (sandboxPath, dockerPath)
        print("\nBuilding Singularity sandbox\n")
@@ -315,7 +345,7 @@ def setup_image(args):
           sys.exit(1)
 
        runningContName = '_'.join([os.getlogin(), imageName, tagName])
-       write_dockerSetup(args.shellFilename, dockerPath, contCmd, runningContName)
+       write_dockerSetup(args.shellFilename, imageFullName, dockerPath, contCmd, runningContName, args.force)
 
     sleep(1)
 
@@ -361,6 +391,7 @@ def main():
                                help="Use %s to the container" % cmd)
     # sp_setupImage.add_argument('--contCmd', action='store',
     #               choices=CONTAINER_CMDS, help='command to run containers')
+    sp_setupImage.add_argument('-f', '--force', action='store_true', default=False, help="Force to override the existing container/sandbox")
     sp_setupImage.add_argument('name', metavar='<ImageName>', help='image name to run')
     sp_setupImage.set_defaults(func=setup_image)
     set_default_subparser(parser, 'setupImage', 3)

@@ -9,7 +9,7 @@ usage()
         Create a new env on top of the existing base env
 
         Usage: source $PROGNAME -h|--help
-               source $PROGNAME -n|--name newEnvName -r|--root-prefix prefixRoot
+               source $PROGNAME -p|--prefix prefixDir
 EO
 }
 
@@ -26,18 +26,9 @@ do
       usage
       return 0
       ;;
-    -n|--name)
+    -p|--prefix)
       if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
-        newEnvName=$2
-        shift 2
-      else
-        echo "Error: Argument for $1 is missing" >&2
-        return 1
-      fi
-      ;;
-    -r|--root-prefix)
-      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
-        prefixRoot=$2
+        prefixDir=$2
         shift 2
       else
         echo "Error: Argument for $1 is missing" >&2
@@ -59,25 +50,22 @@ if [ "X$CondaRoot" = "X" ]; then
    return 1
 fi
 
-if [ "$newEnvName" = "" -o "$prefixRoot" = "" ]; then
-   echo "missing newEnvName or prefixRoot"
+if [ "$prefixDir" = "" ]; then
+   echo "missing prefixDir"
    usage
    return 1
 fi
 
-if [ ! -d $prefixRoot ]; then
-   mkdir -p $prefixRoot
-   if [ $? -ne 0 ]; then
-      echo "$prefixRoot does not exist, cannot create it either; exit now"
-      return 1
-   fi
+if [[ "$prefixDir" != */* ]]; then
+   prefixDir="./$prefixDir"
 fi
+
 
 shellName=$(readlink /proc/$$/exe | awk -F "[/-]" '{print $NF}')
 typeset -f micromamba >/dev/null || eval "$($MAMBA_EXE shell hook --shell=$shellName)"
 
-envDir=$prefixRoot/envs/$newEnvName
-micromamba env create -n $newEnvName -r $prefixRoot
+envDir=$prefixDir
+micromamba env create -p $prefixDir
 if [ $? -ne 0 ]; then
    echo "Failure in creating a new env under $envDir/"
 fi
