@@ -89,6 +89,10 @@ def set_default_subparser(parser, default_subparser, index_action=1):
     parser: the name of the parser you're making changes to
     default_subparser: the name of the subparser to call by default"""
 
+    if len(sys.argv) <= index_action:
+       parser.print_help()
+       sys.exit(1)
+
     subparser_found = False
     for arg in sys.argv[1:]:
         if arg in ['-h', '--help']:  # global help if no subparser
@@ -105,7 +109,7 @@ def set_default_subparser(parser, default_subparser, index_action=1):
             sys.argv.insert(index_action, default_subparser) 
 
 
-def list_images(args=None):
+def listImages(args=None):
     images = list(IMAGE_CONFIG.keys())
     pp = pprint.PrettyPrinter(indent=4)
     print("Available images=")
@@ -122,12 +126,12 @@ def list_FoundImages(name):
     return images_found
 
 
-def get_imageInfo(args, imageFullName=None, printMe=True):
+def getImageInfo(args, imageFullName=None, printOut=True):
     if imageFullName == None:
        images_found = list_FoundImages(args.name)
        if len(images_found) == 0:
           print("\n!!Warning!! imageName=%s is NOT found.\n" % args.name) 
-          list_images()
+          listImages()
           sys.exit(1)
        elif len(images_found) > 1:
           print("\nMultiple images matching %s are found:" % args.name)
@@ -151,23 +155,23 @@ def get_imageInfo(args, imageFullName=None, printMe=True):
        imageSize  = json_tag['full_size']
        lastUpdate = json_tag['last_updated']
        imageDigest = json_tag['digest']
-       if printMe:
+       if printOut:
           print("Found image name= %s\n" % imageFullName)
           print(" Image compressed size=", imageSize)
           print(" Last  update UTC time=", lastUpdate)
           print("     Image SHA256 hash=", imageDigest)
        else:
-          return (imageSize, lastUpdate, imageDigest)
+          return {"imageSize":imageSize, "lastUpdate":lastUpdate, "imageDigest":imageDigest}
     else:
        print("!!Warning!! No tag name=%s is found for the image name=%s" % (tagName, imageName) )
        sys,exit(1)
     
 
-def list_packages(args):
+def listPackages(args):
     images_found = list_FoundImages(args.name)
     if len(images_found) == 0:
        print("\n!!Warning!! imageName=%s is NOT found.\n" % args.name) 
-       list_images()
+       listImages()
        sys.exit(1)
 
     for imageName in images_found:
@@ -181,13 +185,16 @@ def list_packages(args):
 
 # write setup for Singularity sandbox
 def write_sandboxSetup(filename, imageName, dockerPath, sandboxPath, runOpt):
-    imageSize, lastUpdate, imageDigest = get_imageInfo(None, imageName, False)
+    imageInfo = getImageInfo(None, imageName, printOut=False)
+    imageSize = imageInfo["imageSize"]
+    lastUpdate = imageInfo["lastUpdate"]
+    imageDigest = imageInfo["imageDigest"]
     myScript =  os.path.abspath(sys.argv[0])
     shellFile = open(filename, 'w')
     shellFile.write("""
 imageName=%s
 imageCompressedSize=%s
-lastUpdate=%s
+imageLastUpdate=%s
 imageDigest=%s
 dockerPath=%s
 sandboxPath=%s
@@ -207,7 +214,10 @@ fi
 
 # write setup for Docker/Podman container
 def write_dockerSetup(filename, imageName, dockerPath, contCmd, contName, override=False):
-    imageSize, lastUpdate, imageDigest = get_imageInfo(None, imageName, False)
+    imageInfo = getImageInfo(None, imageName, printOut=False)
+    imageSize = imageInfo["imageSize"]
+    lastUpdate = imageInfo["lastUpdate"]
+    imageDigest = imageInfo["imageDigest"]
     if override:
        status, out = getstatusoutput("%s ps -a -f name='^%s$' | tail -1" % (contCmd, contName) )
        if out.find(contName) > 0:
@@ -227,7 +237,7 @@ def write_dockerSetup(filename, imageName, dockerPath, contCmd, contName, overri
     shellFile.write("""
 imageName=%s
 imageCompressedSize=%s
-lastUpdate=%s
+imageLastUpdate=%s
 imageDigest=%s
 imagePath=%s
 contCmd=%s
@@ -262,11 +272,11 @@ eval $runCmd
     shellFile.close()
 
 
-def setup_image(args):
+def setup(args):
     images = list_FoundImages(args.name)
     if len(images) == 0:
        print("No found image matching the name=", args.name)
-       list_images()
+       listImages()
        sys.exit(1)
     elif len(images) > 1:
        print("Multiple images matching the name=", args.name)
@@ -350,6 +360,43 @@ def setup_image(args):
     sleep(1)
 
 
+def getMyImageInfo(filename):
+    shellFile = open(filename, 'r')
+    myImageInfo = {}
+    for line in shellFile:
+       if re.search('image.*=', line):
+          key, value = line.strip().split('=')
+          myImageInfo[key] = value
+    return myImageInfo
+
+
+def printMe(args):
+    if not os.path.exists(args.shellFilename):
+       print("No previous container/sandbox setup is found")
+       return None
+    myImageInfo = getMyImageInfo(args.shellFilename)
+    if len(myImageInfo) > 0:
+       print("The image used in the current work directory:")
+       pp = pprint.PrettyPrinter(indent=4)
+       pp.pprint(myImageInfo)
+
+
+def update(args):
+    if not os.path.exists(args.shellFilename):
+       print("No previous container/sandbox setup is found")
+       return None
+    myImageInfo = getMyImageInfo(args.shellFilename)
+    myImageName = myImageInfo["imageName"]
+    myImageUpdate = myImageInfo["imageLastUpdate"]
+    myImageDigest = myImageInfo["imageDigest"]
+    latestImageInfo = getImageInfo(None, myImageName, printOut=False)
+    latestUpdate = latestImageInfo["lastUpdate"]
+    latestDigest = latestImageInfo["imageDigest"]
+    if latestUpdate > myImageUpdate and myImageDigest != latestDigest:
+       print("Update is available with the last update date=%s" % latestUpdate)
+       print("\twith the corresponding image digest =", latestDigest)
+
+
 def main():
 
     myScript =  os.path.basename( os.path.abspath(sys.argv[0]) )
@@ -359,7 +406,7 @@ def main():
   source %s listImages
   source %s ml-base
   source %s            # Empty arg to rerun the already setup container
-  source %s setupImage ml-base""" % (myScript, myScript, myScript, myScript)
+  source %s setup ml-base""" % (myScript, myScript, myScript, myScript)
 
     example_setup = """Examples:
 
@@ -369,32 +416,36 @@ def main():
     parser = argparse.ArgumentParser(epilog=example_global, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--shellFilename', action='store', help=argparse.SUPPRESS)
     parser.add_argument('--rerun', action='store_true', help="rerun the already setup container")
-    sp = parser.add_subparsers(dest='command', help='Default=setupImage')
+    sp = parser.add_subparsers(dest='command', help='Default=setup')
 
     sp_listImages = sp.add_parser('listImages', help='list all available ML images')
-    sp_listImages.set_defaults(func=list_images)
+    sp_listImages.set_defaults(func=listImages)
 
     sp_listPackages = sp.add_parser('listPackages', help='list packages in the given image')
     sp_listPackages.add_argument('name', metavar='<ImageName>', help='Image name to list packages')
-    sp_listPackages.set_defaults(func=list_packages)
+    sp_listPackages.set_defaults(func=listPackages)
 
     sp_getImageInfo = sp.add_parser('getImageInfo', help='get image size. last update date and SHA256 hash of the given image')
     sp_getImageInfo.add_argument('name', metavar='<ImageName>')
-    sp_getImageInfo.set_defaults(func=get_imageInfo)
+    sp_getImageInfo.set_defaults(func=getImageInfo)
 
-    sp_setupImage = sp.add_parser('setupImage', help='setup a ML image', 
+    sp_printMe = sp.add_parser('printMe', help='print the container/image set up for the work directory')
+    sp_printMe.set_defaults(func=printMe)
+
+    sp_update = sp.add_parser('update', help='(not ready yet) check if the container/image here is up-to-date and update it needed')
+    sp_update.set_defaults(func=update)
+
+    sp_setup = sp.add_parser('setup', help='create a container/sandbox for the given image', 
                     epilog=example_setup, formatter_class=argparse.RawDescriptionHelpFormatter)
-    group_cmd = sp_setupImage.add_mutually_exclusive_group()
+    group_cmd = sp_setup.add_mutually_exclusive_group()
     for cmd in CONTAINER_CMDS:
         group_cmd.add_argument("--%s" % cmd, dest="contCmd", 
                                action="store_const", const="%s" % cmd, 
                                help="Use %s to the container" % cmd)
-    # sp_setupImage.add_argument('--contCmd', action='store',
-    #               choices=CONTAINER_CMDS, help='command to run containers')
-    sp_setupImage.add_argument('-f', '--force', action='store_true', default=False, help="Force to override the existing container/sandbox")
-    sp_setupImage.add_argument('name', metavar='<ImageName>', help='image name to run')
-    sp_setupImage.set_defaults(func=setup_image)
-    set_default_subparser(parser, 'setupImage', 3)
+    sp_setup.add_argument('-f', '--force', action='store_true', default=False, help="Force to override the existing container/sandbox")
+    sp_setup.add_argument('name', metavar='<ImageName>', help='image name to run')
+    sp_setup.set_defaults(func=setup)
+    set_default_subparser(parser, 'setup', 3)
 
     args, extra = parser.parse_known_args()
 
