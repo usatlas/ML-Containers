@@ -204,7 +204,7 @@ Upon the container startup of the ML images, the following message would be prin
 
 As the message suggests, just run `source /create-newEnv-on-base.sh` to create a new extended env.
 ```shell
-% Singularity> source /create-newEnv-on-base.sh -n myEnv -r .
+% Singularity> source /create-newEnv-on-base.sh -p myEnv
 
                                            __
           __  ______ ___  ____ _____ ___  / /_  ____ _
@@ -213,16 +213,11 @@ As the message suggests, just run `source /create-newEnv-on-base.sh` to create a
        / .___/_/ /_/ /_/\__,_/_/ /_/ /_/_.___/\__,_/
       /_/
 
-Empty environment created at prefix: /tmp/yesw/test-contEnv/envs/myEnv
+Empty environment created at prefix: /tmp/yesw/test-contEnv/myEnv
 Next time, you can just run the following to activate your extended env
-        source /tmp/yesw/test-contEnv/envs/myEnv/setup-UserEnv-in-container.sh
+        source /tmp/yesw/test-contEnv/myEnv/setup-UserEnv-in-container.sh
 (myEnv) Singularity> 
-(myEnv) Singularity> ls
-envs
-(myEnv) Singularity> ls envs
-myEnv
-(myEnv) Singularity> 
-(myEnv) Singularity> ls -1 envs/myEnv
+(myEnv) Singularity> ls -1 myEnv
 baseEnv_dir
 bin
 conda-meta
@@ -235,18 +230,18 @@ share
 x86_64-conda-linux-gnu
 ```
 
-A new extended env is created **instantly** (**<1s**) under the current directory (as the option **"-r ."** specifies), 
-and the env destination subdir is *envs/myEnv* (the option **-n myEnv"** specifies). 
+A new extended env is created **instantly** (**<1s**) under the current directory, 
+and the env destination subdir is *myEnv* (as the option **-p myEnv"** specifies). 
 
 A shell script *setup-UserEnv-in-container.sh* is created, saving the Singularity image path and the bind-mount paths used.
 
-To reuse this new extended in a new session, just simply run `source /tmp/yesw/test-contEnv/envs/myEnv/setup-UserEnv-in-container.sh`. 
+To reuse this new extended in a new session, just simply run `source /tmp/yesw/test-contEnv/myEnv/setup-UserEnv-in-container.sh`. 
 It would start up the associated Singulary image, then activate this new extended env:
 
 ```shell
-% source /tmp/yesw/test-contEnv/envs/myEnv/setup-UserEnv-in-container.sh
-singularity exec --env CONTAINER_USERENV=yes -B /home/tmp/yesw/test-contEnv/envs/myEnv /cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/ml-base:centos7-python38 /bin/bash --rcfile /home/tmp/yesw/test-contEnv/envs/myEnv/setup-UserEnv-in-container.sh
-Activating the user env under /home/tmp/yesw/test-contEnv/envs/myEnv
+% source /tmp/yesw/test-contEnv/myEnv/setup-UserEnv-in-container.sh
+singularity exec --env CONTAINER_USERENV=yes -B /home/tmp/yesw/test-contEnv/myEnv /cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/ml-base:centos7-python38 /bin/bash --rcfile /home/tmp/yesw/test-contEnv/myEnv/setup-UserEnv-in-container.sh
+Activating the user env under /home/tmp/yesw/test-contEnv/myEnv
 Singularity> 
 ```
 
@@ -261,7 +256,7 @@ Since the images are built through `micromamba`, the images can also be used as 
 
 Then we source the same script *create-newEnv-on-base.sh*** as in container running, to create an extended env:
 ```shell
-(base) % source $EnvTopDir/create-newEnv-on-base.sh -n myEnv -r .
+(base) % source $EnvTopDir/create-newEnv-on-base.sh -p myEnv
 
                                            __
           __  ______ ___  ____ _____ ___  / /_  ____ _
@@ -270,15 +265,11 @@ Then we source the same script *create-newEnv-on-base.sh*** as in container runn
        / .___/_/ /_/ /_/\__,_/_/ /_/ /_/_.___/\__,_/
       /_/
 
-Empty environment created at prefix: /home/tmp/yesw/test-env/envs/myEnv
+Empty environment created at prefix: /home/tmp/yesw/test-env/myEnv
 Next time, you can just run the following to activate your extended env
-        source /home/tmp/yesw/test-env/envs/myEnv/setupMe-on-host.sh
+        source /home/tmp/yesw/test-env/myEnv/setupMe-on-host.sh
 (myEnv) %
-(myEnv) % ls 
-envs
-(myEnv) % ls envs
-myEnv
-(myEnv) % ls -1 envs/myEnv 
+(myEnv) % ls -1 myEnv 
 baseEnv_dir
 bin
 conda-meta
@@ -291,11 +282,11 @@ share
 x86_64-conda-linux-gnu
 ```
 
-The script *setupMe-on-host.sh* is copied from the image path into the new extended env subdir *envs/myEnv*. 
+The script *setupMe-on-host.sh* is copied from the image path into the new extended env subdir *myEnv*. 
 And the script can be sourced to **reuse** the extended env **in a new session**:
 
 ```shell
-% source /home/tmp/yesw/test-env/envs/myEnv/setupMe-on-host.sh
+% source /home/tmp/yesw/test-env/myEnv/setupMe-on-host.sh
 (base) % micromamba info
 
                                            __
@@ -307,7 +298,7 @@ And the script can be sourced to **reuse** the extended env **in a new session**
 
 
             environment : base (active)
-           env location : /home/tmp/yesw/test-env/envs/myEnv
+           env location : /home/tmp/yesw/test-env/myEnv
       user config files : /usatlas/u/yesw2000/.mambarc
  populated config files : /usatlas/u/yesw2000/.mambarc
                           /usatlas/u/yesw2000/.condarc
@@ -321,7 +312,7 @@ And the script can be sourced to **reuse** the extended env **in a new session**
                           __archspec=1=x86_64
                channels : https://conda.anaconda.org/conda-forge/linux-64
                           https://conda.anaconda.org/conda-forge/noarch
-       base environment : /home/tmp/yesw/test-env/envs/myEnv
+       base environment : /home/tmp/yesw/test-env/myEnv
                platform : linux-64
 (base) %
 ```
@@ -361,7 +352,7 @@ in the new environment directory is **sym-linked** to the `python3` from the ima
 
 ```shell
 Singularity> ls -l `which python3`
-lrwxrwxrwx 1 yesw2000 usatlas 26 Aug 21 21:32 /home/tmp/yesw/test-contEnv/envs/myEnv/bin/python3 -> ../baseEnv_dir/bin/python3
+lrwxrwxrwx 1 yesw2000 usatlas 26 Aug 21 21:32 /home/tmp/yesw/test-contEnv/myEnv/bin/python3 -> ../baseEnv_dir/bin/python3
 
 Singularity> ls -l baseEnv_dir
 lrwxrwxrwx 1 yesw2000 usatlas 10 Aug 22 16:21 baseEnv_dir -> /opt/conda
@@ -375,12 +366,12 @@ Type "help", "copyright", "credits" or "license" for more information.
 >>> import sys
 >>> pp.pprint(sys.path)
 [   '',
-    '/home/tmp/yesw/test-contEnv/envs/myEnv/lib',
-    '/home/tmp/yesw/test-contEnv/envs/myEnv/lib/python3.8/site-packages',
-    '/home/tmp/yesw/test-contEnv/envs/myEnv/baseEnv_dir/lib/python38.zip',
-    '/home/tmp/yesw/test-contEnv/envs/myEnv/baseEnv_dir/lib/python3.8',
-    '/home/tmp/yesw/test-contEnv/envs/myEnv/baseEnv_dir/lib/python3.8/lib-dynload',
-    '/home/tmp/yesw/test-contEnv/envs/myEnv/baseEnv_dir/lib/python3.8/site-packages']
+    '/home/tmp/yesw/test-contEnv/myEnv/lib',
+    '/home/tmp/yesw/test-contEnv/myEnv/lib/python3.8/site-packages',
+    '/home/tmp/yesw/test-contEnv/myEnv/baseEnv_dir/lib/python38.zip',
+    '/home/tmp/yesw/test-contEnv/myEnv/baseEnv_dir/lib/python3.8',
+    '/home/tmp/yesw/test-contEnv/myEnv/baseEnv_dir/lib/python3.8/lib-dynload',
+    '/home/tmp/yesw/test-contEnv/myEnv/baseEnv_dir/lib/python3.8/site-packages']
 >>> 
 ```
 
