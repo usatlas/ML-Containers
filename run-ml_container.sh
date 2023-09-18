@@ -17,14 +17,20 @@ if [[ -e $mySetup && ( $# -eq 0 || "$@" =~ "--rerun" ) ]]; then
    source $mySetup
    ret=$?
 else
+   if [ "X" != "X$BASH_SOURCE" ]; then
+      shopt -s expand_aliases
+   fi
+   alias py_readlink="python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))'"
+   alias py_stat="python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))'"
    myDir=$(dirname $myScript)
-   myDir=$(readlink -f $myDir)
+   myDir=$(py_readlink $myDir)
    now=$(date +"%s")
    python3 -I "$myScript" --shellFilename $mySetup "$@"
    ret=$?
    if [ -e $mySetup ]; then
       # check if the setup script is newly created
-      if [ "$(( $(stat -c "%Y" "$mySetup") - $now ))" -gt 0 ]; then
+      mtime_setup=$(py_stat $mySetup)
+      if [ "$(( $mtime_setup - $now ))" -gt 0 ]; then
          echo -e "\nTo reuse the same container next time, just run"
          echo -e "\n\t source $mySetup \n or \n\t source $myScript"
          sleep 3
@@ -42,6 +48,7 @@ import re
 import pprint
 import json
 import subprocess
+import ast
 from time import sleep
 if pythonMajor < 3:
    from urllib import urlopen
@@ -183,19 +190,66 @@ def listPackages(args):
        print(content)
 
 
+def listNewPkgs(contCmd, contNamePath, lastLineN):
+    history = "/opt/conda/conda-meta/history"
+    if contCmd == 'singularity':
+       grepCmd = 'egrep -n "specs:|cmd:" %s/%s' % (contNamePath, history)
+    else:
+       startCmd = '%s start %s' % (contCmd, contNamePath)
+       ret, output = getstatusoutput(startCmd)
+       if ret != 0:
+          print("!!Warning!! Container=%s can NOT be started" % contNamePath)
+       grepCmd = '%s exec %s egrep -n "specs:|cmd:" %s' % (contCmd, contNamePath, history)
+
+    ret, output = getstatusoutput(grepCmd)
+    if ret != 0:
+       print("!!Warning!! The following command failed")
+       print("\t", grepCmd)
+       sys.exit(1)
+    pkgs = []
+    channels = []
+    for line in output.split('\n'):
+        lineN, lineH, lineObj = line.split(':', 2)
+        if int(lineN) <= int(lastLineN):
+           continue
+        if lineH.find("specs") > 0:
+           pkgs += ast.literal_eval(lineObj.strip())
+        elif lineObj.find(" -c ") > 0 or lineObj.find(" --channel") > 0:
+           items = lineObj.split()
+           channelNext = False
+           for item in items:
+               if channelNext:
+                  channels += [item]
+                  channelNext = False
+                  continue
+               if item == '-c' or item == "--channel":
+                  channelNext = True
+               elif item.startswith("--channel"):
+                  channels += [ item.split('=')[1] ]
+
+    return pkgs, channels
+
+
 # write setup for Singularity sandbox
 def write_sandboxSetup(filename, imageName, dockerPath, sandboxPath, runOpt):
     imageInfo = getImageInfo(None, imageName, printOut=False)
     imageSize = imageInfo["imageSize"]
     lastUpdate = imageInfo["lastUpdate"]
     imageDigest = imageInfo["imageDigest"]
+    ret, output = getstatusoutput("wc -l %s/opt/conda/conda-meta/history" % sandboxPath)
+    if ret != 0:
+       print("!!Warning!! Failed in counting the lines in conda-meta/history")
+       sys.exit(1)
+    linesCondaHistory = output.split()[0]
     myScript =  os.path.abspath(sys.argv[0])
     shellFile = open(filename, 'w')
     shellFile.write("""
+condCmd=singularity
 imageName=%s
 imageCompressedSize=%s
 imageLastUpdate=%s
 imageDigest=%s
+linesCondaHistory=%s
 dockerPath=%s
 sandboxPath=%s
 runOpt="%s"
@@ -208,39 +262,46 @@ else
    echo "Please rebuild the Singularity sandbox by running the following"
    echo -e "\n\t source %s $imageName"
 fi
-""" % (imageName, imageSize, lastUpdate, imageDigest, dockerPath, sandboxPath, runOpt, myScript) )
+""" % (imageName, imageSize, lastUpdate, imageDigest, linesCondaHistory, 
+       dockerPath, sandboxPath, runOpt, myScript) )
     shellFile.close()
 
 
 # write setup for Docker/Podman container
 def write_dockerSetup(filename, imageName, dockerPath, contCmd, contName, override=False):
+    status, out = getstatusoutput("%s ps -a -f name='^%s$' " % (contCmd, contName) )
+    if out.find(contName) > 0:
+       if override:
+          print("\nThe container=%s already exists, removing it now" % contName)
+          status, out = getstatusoutput("%s rm -f %s" % (contCmd, contName) )
+          if status != 0:
+             print("!!Error!! Failed in removing the container=%s" % contName)
+             sys.exit(1)
+       else:
+          print("\nThe container=%s already exists, \n\tplease rerun the command with the option '-f' to remove it" % contName)
+          print("\nQuit now")
+          sys.exit(1)
+
     imageInfo = getImageInfo(None, imageName, printOut=False)
     imageSize = imageInfo["imageSize"]
     lastUpdate = imageInfo["lastUpdate"]
     imageDigest = imageInfo["imageDigest"]
-    if override:
-       status, out = getstatusoutput("%s ps -a -f name='^%s$' | tail -1" % (contCmd, contName) )
-       if out.find(contName) > 0:
-          if re.search("ago\s+(Up|Exited)", out):
-             print("\nThe container=%s already exists, removing it first" % contName)
-             if re.search("ago\s+Up", out):
-                status, out = getstatusoutput("%s stop %s" % (contCmd, contName) )
-                if status != 0:
-                   print("!!Error!! Failed in stopping the container=%s" % contName)
-                   sys.exit(1)
-             status, out = getstatusoutput("%s rm %s" % (contCmd, contName) )
-             if status != 0:
-                print("!!Error!! Failed in removing the container=%s" % contName)
-                sys.exit(1)
+    ret, output = getstatusoutput("%s run --rm %s wc -l /opt/conda/conda-meta/history" % (contCmd, dockerPath) )
+    if ret != 0:
+       print("!!Warning!! Failed in counting the lines in conda-meta/history")
+       sys.exit(1)
+    linesCondaHistory = output.split()[0]
+      
 
     shellFile = open(filename, 'w')
     shellFile.write("""
+contCmd=%s
 imageName=%s
 imageCompressedSize=%s
 imageLastUpdate=%s
 imageDigest=%s
 imagePath=%s
-contCmd=%s
+linesCondaHistory=%s
 contName=%s
 re_exited="ago[\ ]+Exited"
 re_up="ago[\ ]+Up"
@@ -249,26 +310,27 @@ listOut=$($contCmd ps -a -f name='^'$contName'$' 2>/dev/null | tail -1)
 
 if [[ "$listOut" =~ $re_exited ]]; then
    startCmd="$contCmd start $contName"
-   echo -e "\n$startCmd\n"
+   echo -e "\\n$startCmd"
    eval $startCmd >/dev/null
 elif [[ "$listOut" =~ $re_up ]]; then
    if [[ "$listOut" =~ "(Paused)" ]]; then
       unpauseCmd="$contCmd unpause $contName"
-      echo -e "\n$unpauseCmd\n"
+      echo -e "\\n$unpauseCmd"
       eval $unpauseCmd >/dev/null
    fi
 else
    createCmd="$contCmd create -it -v $PWD:$PWD -w $PWD --name $contName $imagePath"
-   echo -e "\\n$createCmd\\n"
+   echo -e "\\n$createCmd"
    eval $createCmd >/dev/null
    startCmd="$contCmd start $contName"
-   echo -e "\n$startCmd\n"
+   echo -e "\\n$startCmd"
    eval $startCmd >/dev/null
 fi
 runCmd="$contCmd exec -it $contName /bin/bash"
 echo -e "\\n$runCmd\\n"
 eval $runCmd
-""" % (imageName, imageSize, lastUpdate, imageDigest, dockerPath, contCmd, contName) )
+""" % (contCmd, imageName, imageSize, lastUpdate, imageDigest, 
+       dockerPath, linesCondaHistory, contName) )
     shellFile.close()
 
 
@@ -363,8 +425,9 @@ def setup(args):
 def getMyImageInfo(filename):
     shellFile = open(filename, 'r')
     myImageInfo = {}
+    contCmd = None
     for line in shellFile:
-       if re.search('image.*=', line):
+       if re.search('^image.*=', line) or re.search('^cont.*=', line) or line.startswith("linesConda") or line.startswith("sandboxPath"):
           key, value = line.strip().split('=')
           myImageInfo[key] = value
     return myImageInfo
@@ -375,10 +438,24 @@ def printMe(args):
        print("No previous container/sandbox setup is found")
        return None
     myImageInfo = getMyImageInfo(args.shellFilename)
+    contCmd = myImageInfo["contCmd"]
+    linesCondaHistory = myImageInfo.pop("linesCondaHistory")
+    pp = pprint.PrettyPrinter(indent=4)
     if len(myImageInfo) > 0:
-       print("The image used in the current work directory:")
-       pp = pprint.PrettyPrinter(indent=4)
+       print("The image/container used in the current work directory:")
        pp.pprint(myImageInfo)
+    # print("linesCondaHistory=", linesCondaHistory)
+    if contCmd == 'singularity':
+       contNamePath = myImageInfo["sandboxPath"]
+    else:
+       contNamePath = myImageInfo["contName"]
+    pkgs, channels = listNewPkgs(contCmd, contNamePath, linesCondaHistory)
+    if len(pkgs) > 0:
+       print("\nThe following pkgs and their dependencies are installed")
+       pp.pprint(pkgs)
+    if len(channels) > 0:
+       print("\nThe following channels are needed")
+       pp.pprint(channels)
 
 
 def update(args):
@@ -395,6 +472,8 @@ def update(args):
     if latestUpdate > myImageUpdate and myImageDigest != latestDigest:
        print("Update is available with the last update date=%s" % latestUpdate)
        print("\twith the corresponding image digest =", latestDigest)
+    else:
+       print("The current container/sandbox is already up-to-date")
 
 
 def main():
