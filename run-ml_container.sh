@@ -116,6 +116,15 @@ def set_default_subparser(parser, default_subparser, index_action=1):
             sys.argv.insert(index_action, default_subparser) 
 
 
+def run_shellCmd(shellCmd, exitOnFailure=True):
+    retCode, out = getstatusoutput(shellCmd)
+    if retCode != 0 and exitOnFailure:
+       print("!!Error!! Failed in running the following command")
+       print("\t", shellCmd)
+       sys.exit(1)
+    return out
+
+
 def listImages(args=None):
     images = list(IMAGE_CONFIG.keys())
     pp = pprint.PrettyPrinter(indent=4)
@@ -196,38 +205,93 @@ def listNewPkgs(contCmd, contNamePath, lastLineN):
        grepCmd = 'egrep -n "specs:|cmd:" %s/%s' % (contNamePath, history)
     else:
        startCmd = '%s start %s' % (contCmd, contNamePath)
-       ret, output = getstatusoutput(startCmd)
-       if ret != 0:
-          print("!!Warning!! Container=%s can NOT be started" % contNamePath)
+       output = run_shellCmd(startCmd)
        grepCmd = '%s exec %s egrep -n "specs:|cmd:" %s' % (contCmd, contNamePath, history)
 
-    ret, output = getstatusoutput(grepCmd)
-    if ret != 0:
-       print("!!Warning!! The following command failed")
-       print("\t", grepCmd)
-       sys.exit(1)
-    pkgs = []
+    output = run_shellCmd(grepCmd)
+    pkgs = {}
     channels = []
     for line in output.split('\n'):
         lineN, lineH, lineObj = line.split(':', 2)
         if int(lineN) <= int(lastLineN):
            continue
         if lineH.find("specs") > 0:
-           pkgs += ast.literal_eval(lineObj.strip())
+           if lineH.find("remove") > 0:
+              removeIt = True
+           else:
+              removeIt = False
+           items = ast.literal_eval(lineObj.strip())
+           for item in items:
+               key, delim, value = (re.split('(<|=|>)', item, 1) + [None]*2)[:3]
+               if value is None:
+                  value = ''
+               else:
+                  value = delim + value
+               if key not in pkgs:
+                  if not removeIt:
+                     pkgs[key] = value
+                  else:
+                     print("!!Warning!! Removing non new primary pkg=%s is NOT supported" % key)
+               elif key in pkgs:
+                  if removeIt:
+                     del pkgs[key]
+                  elif value != '':
+                     pkgs[key] = value
         elif lineObj.find(" -c ") > 0 or lineObj.find(" --channel") > 0:
            items = lineObj.split()
            channelNext = False
            for item in items:
                if channelNext:
-                  channels += [item]
+                  if item not in channels and item != 'conda-forge':
+                     channels += [item]
                   channelNext = False
                   continue
                if item == '-c' or item == "--channel":
                   channelNext = True
-               elif item.startswith("--channel"):
-                  channels += [ item.split('=')[1] ]
+               elif item.startswith("--channel="):
+                  value = item.split('=')[1]
+                  if value not in channels and value != 'conda-forge':
+                     channels += [ value ]
 
-    return pkgs, channels
+    pkgs_list = []
+    for k, v in pkgs.items():
+        pkgs_list += [ k + v ]
+    return pkgs_list, channels
+
+
+# install users new pkgs
+def install_newPkgs(contCmd, contNamePath, pkgs, channels):
+    channels_pkgs = ''
+    for channel in channels:
+        channels_pkgs += ' -c ' + channel
+    for pkg in pkgs:
+        channels_pkgs += ' ' + pkg
+    bash_cmd = "/bin/bash -c 'micromamba install -y %s'" % channels_pkgs
+    if contCmd == 'singularity':
+       installCmd = "singularity exec -w -H %s %s %s" \
+                    % (os.getcwd(), contNamePath, bash_cmd)
+    else:
+       installCmd = "%s exec %s %s" % (contCmd, contNamePath, bash_cmd)
+    print("\nGoing to install new pkg(s) with the following command\n")
+    print("\t", installCmd)
+    run_shellCmd(installCmd)
+
+
+# build Singularity sandbox
+def build_sandbox(sandboxPath, dockerPath, force=False):
+    if os.path.exists(sandboxPath):
+       if not force and os.path.exists(sandboxPath + "/entrypoint.sh"):
+          print("%s already, and would not override it." % sandboxPath)
+          print("\nTo override the existing sandbox, please add the option '-f'")
+          print("Quit now")
+          sys.exit(1)
+       os.system("chmod -R +w %s; rm -rf %s" % (sandboxPath, sandboxPath) )
+    buildCmd = "singularity build --sandbox --fix-perms -F %s docker://%s" % (sandboxPath, dockerPath)
+    print("\nBuilding Singularity sandbox\n")
+    retCode = subprocess.call(buildCmd.split())
+    if retCode != 0:
+       print("!!Warning!! Building the Singularity sandbox failed. Exit now")
+       sys.exit(1)
 
 
 # write setup for Singularity sandbox
@@ -236,15 +300,12 @@ def write_sandboxSetup(filename, imageName, dockerPath, sandboxPath, runOpt):
     imageSize = imageInfo["imageSize"]
     lastUpdate = imageInfo["lastUpdate"]
     imageDigest = imageInfo["imageDigest"]
-    ret, output = getstatusoutput("wc -l %s/opt/conda/conda-meta/history" % sandboxPath)
-    if ret != 0:
-       print("!!Warning!! Failed in counting the lines in conda-meta/history")
-       sys.exit(1)
+    output = run_shellCmd("wc -l %s/opt/conda/conda-meta/history" % sandboxPath)
     linesCondaHistory = output.split()[0]
     myScript =  os.path.abspath(sys.argv[0])
     shellFile = open(filename, 'w')
     shellFile.write("""
-condCmd=singularity
+contCmd=singularity
 imageName=%s
 imageCompressedSize=%s
 imageLastUpdate=%s
@@ -267,29 +328,41 @@ fi
     shellFile.close()
 
 
-# write setup for Docker/Podman container
-def write_dockerSetup(filename, imageName, dockerPath, contCmd, contName, override=False):
-    status, out = getstatusoutput("%s ps -a -f name='^%s$' " % (contCmd, contName) )
+# create docker/podman container
+def create_container(contCmd, contName, dockerPath, force=False):
+    pullCmd = "%s pull %s" % (contCmd, dockerPath)
+    retCode = subprocess.call(pullCmd.split())
+    if retCode != 0:
+       print("!!Warning!! Pulling the image %s failed, exit now" % dockerPath)
+       sys.exit(1)
+
+    out = run_shellCmd("%s ps -a -f name='^%s$' " % (contCmd, contName) )
     if out.find(contName) > 0:
-       if override:
+       if force:
           print("\nThe container=%s already exists, removing it now" % contName)
-          status, out = getstatusoutput("%s rm -f %s" % (contCmd, contName) )
-          if status != 0:
-             print("!!Error!! Failed in removing the container=%s" % contName)
-             sys.exit(1)
+          out = run_shellCmd("%s rm -f %s" % (contCmd, contName) )
        else:
           print("\nThe container=%s already exists, \n\tplease rerun the command with the option '-f' to remove it" % contName)
           print("\nQuit now")
           sys.exit(1)
 
+    pwd = os.getcwd()
+    createCmd = "%s create -it -v %s:%s -w %s --name %s %s" % \
+                (contCmd, pwd, pwd, pwd, contName, dockerPath)
+    out = run_shellCmd(createCmd)
+
+    startCmd = "%s start %s" % (contCmd, contName)
+    out = run_shellCmd(startCmd)
+
+
+# write setup for Docker/Podman container
+def write_dockerSetup(filename, imageName, dockerPath, contCmd, contName, override=False):
     imageInfo = getImageInfo(None, imageName, printOut=False)
     imageSize = imageInfo["imageSize"]
     lastUpdate = imageInfo["lastUpdate"]
     imageDigest = imageInfo["imageDigest"]
-    ret, output = getstatusoutput("%s run --rm %s wc -l /opt/conda/conda-meta/history" % (contCmd, dockerPath) )
-    if ret != 0:
-       print("!!Warning!! Failed in counting the lines in conda-meta/history")
-       sys.exit(1)
+
+    output = run_shellCmd("%s run --rm %s wc -l /opt/conda/conda-meta/history" % (contCmd, dockerPath) )
     linesCondaHistory = output.split()[0]
       
 
@@ -300,7 +373,7 @@ imageName=%s
 imageCompressedSize=%s
 imageLastUpdate=%s
 imageDigest=%s
-imagePath=%s
+dockerPath=%s
 linesCondaHistory=%s
 contName=%s
 re_exited="ago[\ ]+Exited"
@@ -319,7 +392,7 @@ elif [[ "$listOut" =~ $re_up ]]; then
       eval $unpauseCmd >/dev/null
    fi
 else
-   createCmd="$contCmd create -it -v $PWD:$PWD -w $PWD --name $contName $imagePath"
+   createCmd="$contCmd create -it -v $PWD:$PWD -w $PWD --name $contName $dockerPath"
    echo -e "\\n$createCmd"
    eval $createCmd >/dev/null
    startCmd="$contCmd start $contName"
@@ -376,20 +449,7 @@ def setup(args):
        if not os.path.exists("singularity"):
           os.mkdir("singularity")
        sandboxPath = "singularity/%s" % imageFullName
-       if os.path.exists(sandboxPath):
-          if not args.force and os.path.exists(sandboxPath + "/entrypoint.sh"):
-             print("%s already, and would not override it." % sandboxPath)
-             print("\nTo override the existing sandbox, please add the option '-f'")
-             print("Quit now")
-             sys.exit(1)
-          os.system("chmod -R +w %s; rm -rf %s" % (sandboxPath, sandboxPath) )
-       buildCmd = "singularity build --sandbox -F %s docker://%s" % (sandboxPath, dockerPath)
-       print("\nBuilding Singularity sandbox\n")
-       sleep(1)
-       retCode = subprocess.call(buildCmd.split())
-       if retCode != 0:
-          print("!!Warning!! Building the Singularity sandbox failed. Exit now")
-          sys.exit(1)
+       build_sandbox(sandboxPath, dockerPath, args.force)
 
        imageFullPath = os.path.join(os.getcwd(), sandboxPath)
        runCmd = "singularity run -w %s" % imageFullPath
@@ -405,19 +465,12 @@ def setup(args):
 
     elif contCmd == "podman" or contCmd == "docker":
        testCmd = "%s info" % contCmd
-       retCode, out = getstatusoutput(testCmd)
-       if retCode != 0:
-          print("!!Warning!! %s is NOT setup properly, exit now" % contCmd)
-          sys,exit(1)
+       out = run_shellCmd(testCmd)
+       contName = '_'.join([os.getlogin(), imageName, tagName])
 
-       pullCmd = "%s pull %s" % (contCmd, dockerPath)
-       retCode = subprocess.call(pullCmd.split())
-       if retCode != 0:
-          print("!!Warning!! Pulling the image %s failed, exit now" % dockerPath)
-          sys.exit(1)
-
-       runningContName = '_'.join([os.getlogin(), imageName, tagName])
-       write_dockerSetup(args.shellFilename, imageFullName, dockerPath, contCmd, runningContName, args.force)
+       create_container(contCmd, contName, dockerPath, args.force)
+       write_dockerSetup(args.shellFilename, imageFullName, dockerPath, 
+                         contCmd, contName, args.force)
 
     sleep(1)
 
@@ -427,7 +480,7 @@ def getMyImageInfo(filename):
     myImageInfo = {}
     contCmd = None
     for line in shellFile:
-       if re.search('^image.*=', line) or re.search('^cont.*=', line) or line.startswith("linesConda") or line.startswith("sandboxPath"):
+       if re.search(r'^(cont|image|docker|sand|runOpt|lines).*=', line):
           key, value = line.strip().split('=')
           myImageInfo[key] = value
     return myImageInfo
@@ -440,11 +493,10 @@ def printMe(args):
     myImageInfo = getMyImageInfo(args.shellFilename)
     contCmd = myImageInfo["contCmd"]
     linesCondaHistory = myImageInfo.pop("linesCondaHistory")
+    myImageInfo.pop("runOpt")
     pp = pprint.PrettyPrinter(indent=4)
-    if len(myImageInfo) > 0:
-       print("The image/container used in the current work directory:")
-       pp.pprint(myImageInfo)
-    # print("linesCondaHistory=", linesCondaHistory)
+    print("The image/container used in the current work directory:")
+    pp.pprint(myImageInfo)
     if contCmd == 'singularity':
        contNamePath = myImageInfo["sandboxPath"]
     else:
@@ -454,7 +506,7 @@ def printMe(args):
        print("\nThe following pkgs and their dependencies are installed")
        pp.pprint(pkgs)
     if len(channels) > 0:
-       print("\nThe following channels are needed")
+       print("\nThe following channels besides the default channel 'conda-forge' are needed")
        pp.pprint(channels)
 
 
@@ -462,6 +514,7 @@ def update(args):
     if not os.path.exists(args.shellFilename):
        print("No previous container/sandbox setup is found")
        return None
+
     myImageInfo = getMyImageInfo(args.shellFilename)
     myImageName = myImageInfo["imageName"]
     myImageUpdate = myImageInfo["imageLastUpdate"]
@@ -474,6 +527,28 @@ def update(args):
        print("\twith the corresponding image digest =", latestDigest)
     else:
        print("The current container/sandbox is already up-to-date")
+       sys.exit(0)
+
+    contCmd = myImageInfo["contCmd"]
+    linesCondaHistory = myImageInfo.pop("linesCondaHistory")
+    dockerPath = myImageInfo['dockerPath']
+
+    if contCmd == 'singularity':
+       contNamePath = myImageInfo["sandboxPath"]
+    else:
+       contNamePath = myImageInfo["contName"]
+    pkgs, channels = listNewPkgs(contCmd, contNamePath, linesCondaHistory)
+
+    if contCmd == 'singularity':
+       build_sandbox(contNamePath, dockerPath, force=True)
+       write_sandboxSetup(args.shellFilename, myImageName, dockerPath, \
+                                 contNamePath, myImageInfo["runOpt"].strip('"'))
+    else:
+       create_container(contCmd, contNamePath, dockerPath, force=True)
+       write_dockerSetup(args.shellFilename, myImageName, dockerPath, \
+                                contCmd, contNamePath, override=True)
+    if len(pkgs) > 0:
+       install_newPkgs(contCmd, contNamePath, pkgs, channels)
 
 
 def main():
