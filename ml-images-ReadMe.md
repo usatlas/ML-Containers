@@ -500,7 +500,7 @@ It supports 3 types of container commands: **podman**, **docker**, and **singula
 >   source run-ml_container.sh ml-base
 >   source run-ml_container.sh --sing ml-base
 
-### Container Setup Through `podman`
+#### Container Setup Through `podman`
 
 On a computer with `podman` set up, the script will choose `podman` to run ML containers.
 
@@ -583,7 +583,7 @@ The image/container used in the current work directory:
     'imageName': 'ml-base:centos7-python38'}
 ```
 
-### Container Setup Through `docker`
+#### Container Setup Through `docker`
 
 If a computer has `docker`, but no `podman`, running "**./run-ml_container.sh ml-base**" will create a container with the image *ml-base*, and enter into the created container:
 
@@ -628,7 +628,7 @@ To install new pkg(s), run "micromamba install pkg1 [pkg2 ...]"
 (base) [root@17ae52b4e5d4 yesw]#
 ```
 
-### Container Setup Through `singularity`
+#### Container Setup Through `singularity`
 
 If a computer does not have either `podman`, or `docker`, and `singularity` is installed, or specifying the option `--singularity`, the script will build a Singularity sandbox for the given ML image, and run a container with the built sandbox. Just run "run-ml_container.sh -h" (click the expand icon ▶ for details)
 
