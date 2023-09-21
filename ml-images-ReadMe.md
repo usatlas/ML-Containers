@@ -60,7 +60,7 @@ Other dependency packages:
 - matplotlib
 - plotly
 
-For the full list of packages, please refer to the file *list-of-pkgs-inside.txt*.
+For the full list of packages, please refer to the file [list-of-pkgs-inside.txt](centos7/ml-base/list-of-pkgs-inside.txt).
 
 ### Image *ml-pyroot*
 
@@ -569,6 +569,247 @@ To install new pkg(s), run "micromamba install pkg1 [pkg2 ...]"
 (base) [root@e2a5269c74dd yesw]# 
 ```
 
+Inside the container, to **install a new package** *dask*, just run "*micromamba install -y dask*" (click the expand icon ▶ for details).
+
+<details>
+<summary>micromamba install -y dask</summary>
+<blockquote><pre>
+(base) [root@e2a5269c74dd yesw]# micromamba install -y dask
+
+                                           __
+          __  ______ ___  ____ _____ ___  / /_  ____ _
+         / / / / __ `__ \/ __ `/ __ `__ \/ __ \/ __ `/
+        / /_/ / / / / / / /_/ / / / / / / /_/ / /_/ /
+       / .___/_/ /_/ /_/\__,_/_/ /_/ /_/_.___/\__,_/
+      /_/
+
+conda-forge/noarch                                  14.2MB @   2.3MB/s  7.2s
+conda-forge/linux-64                                34.4MB @   2.6MB/s 16.1s
+
+Pinned packages:
+  - python 3.8.*
+
+
+Transaction
+
+  Prefix: /opt/conda
+
+  Updating specs:
+
+   - dask
+
+
+  Package                    Version  Build               Channel          Size
+─────────────────────────────────────────────────────────────────────────────────
+  Install:
+─────────────────────────────────────────────────────────────────────────────────
+
+  + aws-c-auth                 0.7.3  he2921ad_3          conda-forge     102kB
+  + aws-c-cal                  0.6.2  hc309b26_1          conda-forge      51kB
+  + aws-c-common               0.9.0  hd590300_0          conda-forge     198kB
+  + aws-c-compression         0.2.17  h4d4d85c_2          conda-forge      19kB
+  + aws-c-event-stream         0.3.2  h2e3709c_0          conda-forge      54kB
+  + aws-c-http                0.7.12  hc865f51_1          conda-forge     194kB
+  + aws-c-io                 0.13.32  h1a03231_3          conda-forge     154kB
+  + aws-c-mqtt                 0.9.6  h3a0376c_0          conda-forge     164kB
+  + aws-c-s3                  0.3.17  h1678ad6_0          conda-forge      86kB
+  + aws-c-sdkutils            0.1.12  h4d4d85c_1          conda-forge      53kB
+  + aws-checksums             0.1.17  h4d4d85c_1          conda-forge      50kB
+  + aws-crt-cpp               0.23.1  hf7d0843_2          conda-forge     324kB
+  + aws-sdk-cpp             1.11.156  he6c2984_2          conda-forge       3MB
+  + bokeh                      3.1.1  pyhd8ed1ab_0        conda-forge       6MB
+  + c-ares                    1.19.1  hd590300_0          conda-forge     113kB
+  + cloudpickle                2.2.1  pyhd8ed1ab_0        conda-forge      28kB
+  + cytoolz                   0.12.2  py38h01eb140_0      conda-forge     374kB
+  + dask                    2023.5.0  pyhd8ed1ab_0        conda-forge       7kB
+  + dask-core               2023.5.0  pyhd8ed1ab_0        conda-forge     845kB
+  + distributed             2023.5.0  pyhd8ed1ab_0        conda-forge     768kB
+  + fsspec                  2023.9.1  pyh1a96a4e_0        conda-forge     124kB
+  + gflags                     2.2.2  he1b5a44_1004       conda-forge     117kB
+  + glog                       0.6.0  h6f12383_0          conda-forge     114kB
+  + keyutils                   1.6.1  h166bdaf_0          conda-forge     118kB
+  + krb5                      1.21.2  h659d440_0          conda-forge       1MB
+  + libabseil             20230802.1  cxx17_h59595ed_0    conda-forge       1MB
+  + libarrow                  13.0.0  h1935d02_4_cpu      conda-forge      28MB
+  + libcrc32c                  1.1.2  h9c3ff4c_0          conda-forge      20kB
+  + libcurl                    8.3.0  hca28451_0          conda-forge     388kB
+  + libedit             3.1.20191231  he28a2e2_2          conda-forge     124kB
+  + libev                       4.33  h516909a_1          conda-forge     106kB
+  + libevent                  2.1.12  hf998b51_1          conda-forge     427kB
+  + libgoogle-cloud           2.12.0  h8d7e28b_2          conda-forge      46MB
+  + libgrpc                   1.57.0  ha4d0f93_1          conda-forge       6MB
+  + libnghttp2                1.52.0  h61bc06f_0          conda-forge     622kB
+  + libnuma                   2.0.16  h0b41bf4_1          conda-forge      41kB
+  + libprotobuf               4.23.4  hf27288f_6          conda-forge       3MB
+  + libssh2                   1.11.0  h0841786_0          conda-forge     271kB
+  + libthrift                 0.19.0  h8fd135c_0          conda-forge     410kB
+  + libutf8proc                2.8.0  h166bdaf_0          conda-forge     101kB
+  + locket                     1.0.0  pyhd8ed1ab_0        conda-forge       8kB
+  + msgpack-python             1.0.5  py38hfbd4bf9_0      conda-forge      87kB
+  + orc                        1.9.0  h52d3b3c_2          conda-forge       1MB
+  + partd                      1.4.0  pyhd8ed1ab_1        conda-forge      21kB
+  + pyarrow                   13.0.0  py38h96a5bb7_4_cpu  conda-forge       4MB
+  + rdma-core                   28.9  h59595ed_1          conda-forge       4MB
+  + re2                   2023.03.02  h8c504da_0          conda-forge     201kB
+  + s2n                       1.3.51  h06160fa_0          conda-forge     375kB
+  + snappy                    1.1.10  h9fff704_0          conda-forge      39kB
+  + sortedcontainers           2.4.0  pyhd8ed1ab_0        conda-forge      26kB
+  + tblib                      2.0.0  pyhd8ed1ab_0        conda-forge      17kB
+  + toolz                     0.12.0  pyhd8ed1ab_0        conda-forge      49kB
+  + ucx                       1.14.1  h64cca9d_5          conda-forge      15MB
+  + xyzservices             2023.7.0  pyhd8ed1ab_0        conda-forge      36kB
+  + zict                       3.0.0  pyhd8ed1ab_0        conda-forge      36kB
+
+  Upgrade:
+─────────────────────────────────────────────────────────────────────────────────
+
+  - zstandard                 0.19.0  py38ha98ab4e_2      conda-forge     394kB
+  + zstandard                 0.21.0  py38ha98ab4e_0      conda-forge     406kB
+  - zstd                       1.5.2  hfc55251_7          conda-forge     431kB
+  + zstd                       1.5.5  hfc55251_0          conda-forge     545kB
+
+  Summary:
+
+  Install: 55 packages
+  Upgrade: 2 packages
+
+  Total download: 127MB
+
+─────────────────────────────────────────────────────────────────────────────────
+
+
+
+Transaction starting
+toolz                                               49.1kB @ 649.5kB/s  0.1s
+cloudpickle                                         27.9kB @ 312.1kB/s  0.1s
+sortedcontainers                                    26.3kB @ 292.5kB/s  0.1s
+libutf8proc                                        101.1kB @ 748.5kB/s  0.0s
+tblib                                               16.6kB @ 100.5kB/s  0.2s
+locket                                               8.2kB @  43.9kB/s  0.2s
+gflags                                             116.5kB @ 570.5kB/s  0.0s
+dask-core                                          844.9kB @   3.9MB/s  0.1s
+libev                                              106.2kB @ 456.3kB/s  0.0s
+libcrc32c                                           20.4kB @  79.2kB/s  0.1s
+libthrift                                          410.4kB @   1.5MB/s  0.1s
+glog                                               114.3kB @ 376.1kB/s  0.0s
+aws-c-cal                                           50.8kB @ 153.3kB/s  0.1s
+rdma-core                                            3.7MB @  11.0MB/s  0.1s
+aws-c-io                                           153.9kB @ 437.3kB/s  0.0s
+aws-c-mqtt                                         163.7kB @ 426.1kB/s  0.0s
+aws-c-event-stream                                  53.8kB @ 120.2kB/s  0.1s
+aws-sdk-cpp                                          3.4MB @   7.6MB/s  0.1s
+fsspec                                             123.8kB @ 248.1kB/s  0.1s
+xyzservices                                         36.3kB @  72.7kB/s  0.1s
+ucx                                                 15.2MB @  30.4MB/s  0.2s
+distributed                                        767.8kB @   1.4MB/s  0.2s
+snappy                                              38.9kB @  71.4kB/s  0.0s
+aws-c-common                                       197.6kB @ 361.4kB/s  0.0s
+libevent                                           427.4kB @ 695.2kB/s  0.1s
+cytoolz                                            374.1kB @ 601.0kB/s  0.1s
+aws-checksums                                       50.0kB @  77.6kB/s  0.1s
+libnuma                                             41.1kB @  59.7kB/s  0.1s
+aws-c-s3                                            85.9kB @ 124.2kB/s  0.0s
+orc                                                  1.0MB @   1.5MB/s  0.1s
+aws-c-http                                         193.9kB @ 272.8kB/s  0.1s
+libabseil                                            1.3MB @   1.7MB/s  0.1s
+msgpack-python                                      86.8kB @ 112.4kB/s  0.1s
+pyarrow                                              4.1MB @   5.2MB/s  0.1s
+partd                                               20.7kB @  26.5kB/s  0.1s
+aws-c-compression                                   19.1kB @  23.4kB/s  0.0s
+libedit                                            123.9kB @ 146.5kB/s  0.1s
+krb5                                                 1.4MB @   1.6MB/s  0.1s
+s2n                                                374.7kB @ 410.5kB/s  0.1s
+zstandard                                          405.7kB @ 418.3kB/s  0.1s
+libgrpc                                              6.0MB @   5.9MB/s  0.2s
+bokeh                                                5.9MB @   5.7MB/s  0.2s
+aws-c-auth                                         101.7kB @  93.9kB/s  0.1s
+libnghttp2                                         622.4kB @ 570.0kB/s  0.2s
+dask                                                 7.4kB @   6.5kB/s  0.1s
+libssh2                                            271.1kB @ 238.0kB/s  0.1s
+libcurl                                            388.3kB @ 330.4kB/s  0.1s
+c-ares                                             113.4kB @  93.3kB/s  0.1s
+aws-c-sdkutils                                      53.1kB @  43.7kB/s  0.1s
+libarrow                                            27.8MB @  22.9MB/s  0.4s
+zict                                                36.3kB @  29.1kB/s  0.0s
+zstd                                               545.2kB @ 433.1kB/s  0.0s
+keyutils                                           117.8kB @  93.5kB/s  0.0s
+libprotobuf                                          2.6MB @   2.0MB/s  0.0s
+aws-crt-cpp                                        324.2kB @ 245.0kB/s  0.1s
+libgoogle-cloud                                     46.2MB @  29.5MB/s  0.4s
+re2                                                201.2kB @  19.7kB/s 10.1s
+Linking locket-1.0.0-pyhd8ed1ab_0
+Linking cloudpickle-2.2.1-pyhd8ed1ab_0
+Linking sortedcontainers-2.4.0-pyhd8ed1ab_0
+Linking tblib-2.0.0-pyhd8ed1ab_0
+Linking toolz-0.12.0-pyhd8ed1ab_0
+Linking zict-3.0.0-pyhd8ed1ab_0
+Linking fsspec-2023.9.1-pyh1a96a4e_0
+Linking xyzservices-2023.7.0-pyhd8ed1ab_0
+Linking partd-1.4.0-pyhd8ed1ab_1
+Linking bokeh-3.1.1-pyhd8ed1ab_0
+Linking dask-core-2023.5.0-pyhd8ed1ab_0
+Changing zstd-1.5.2-hfc55251_7 ==> zstd-1.5.5-hfc55251_0
+Linking msgpack-python-1.0.5-py38hfbd4bf9_0
+Linking libutf8proc-2.8.0-h166bdaf_0
+Linking re2-2023.03.02-h8c504da_0
+Linking snappy-1.1.10-h9fff704_0
+Linking libevent-2.1.12-hf998b51_1
+Linking libabseil-20230802.1-cxx17_h59595ed_0
+Linking c-ares-1.19.1-hd590300_0
+Linking libcrc32c-1.1.2-h9c3ff4c_0
+Linking aws-c-common-0.9.0-hd590300_0
+Linking s2n-1.3.51-h06160fa_0
+Linking gflags-2.2.2-he1b5a44_1004
+Linking libssh2-1.11.0-h0841786_0
+Linking keyutils-1.6.1-h166bdaf_0
+Linking libev-4.33-h516909a_1
+Linking libedit-3.1.20191231-he28a2e2_2
+Linking libnuma-2.0.16-h0b41bf4_1
+Linking rdma-core-28.9-h59595ed_1
+Linking cytoolz-0.12.2-py38h01eb140_0
+Changing zstandard-0.19.0-py38ha98ab4e_2 ==> zstandard-0.21.0-py38ha98ab4e_0
+Linking libthrift-0.19.0-h8fd135c_0
+Linking libprotobuf-4.23.4-hf27288f_6
+Linking aws-c-compression-0.2.17-h4d4d85c_2
+Linking aws-c-cal-0.6.2-hc309b26_1
+Linking aws-c-sdkutils-0.1.12-h4d4d85c_1
+Linking aws-checksums-0.1.17-h4d4d85c_1
+Linking glog-0.6.0-h6f12383_0
+Linking libnghttp2-1.52.0-h61bc06f_0
+Linking krb5-1.21.2-h659d440_0
+Linking ucx-1.14.1-h64cca9d_5
+Linking orc-1.9.0-h52d3b3c_2
+Linking libgrpc-1.57.0-ha4d0f93_1
+Linking aws-c-io-0.13.32-h1a03231_3
+Linking libcurl-8.3.0-hca28451_0
+Linking aws-c-http-0.7.12-hc865f51_1
+Linking aws-c-event-stream-0.3.2-h2e3709c_0
+Linking libgoogle-cloud-2.12.0-h8d7e28b_2
+Linking aws-c-auth-0.7.3-he2921ad_3
+Linking aws-c-mqtt-0.9.6-h3a0376c_0
+Linking aws-c-s3-0.3.17-h1678ad6_0
+Linking aws-crt-cpp-0.23.1-hf7d0843_2
+Linking aws-sdk-cpp-1.11.156-he6c2984_2
+Linking libarrow-13.0.0-h1935d02_4_cpu
+Linking pyarrow-13.0.0-py38h96a5bb7_4_cpu
+Linking distributed-2023.5.0-pyhd8ed1ab_0
+Linking dask-2023.5.0-pyhd8ed1ab_0
+
+Transaction finished
+
+To activate this environment, use:
+
+    micromamba activate base
+
+Or to execute a single command in this environment, use:
+
+    micromamba run -n base mycommand
+
+(base) [root@e2a5269c74dd yesw]# 
+
+</pre></blockquote>
+</details>
+
 The command **printMe** could help print out the information about the built container and the corresponding image. Just run "**./run-ml_container.sh printMe**":
 
 ```shell
@@ -581,6 +822,9 @@ The image/container used in the current work directory:
     'imageDigest': 'sha256:78fe364bd448c48b476b344940b70c1b968c743c8aa4d2b0aa7351283d2d8270',
     'imageLastUpdate': '2023-09-07T14:43:58.171805Z',
     'imageName': 'ml-base:centos7-python38'}
+
+The following pkgs and their dependencies are installed
+['dask']
 ```
 
 #### Container Setup Through `docker`
