@@ -874,7 +874,9 @@ To install new pkg(s), run "micromamba install pkg1 [pkg2 ...]"
 
 #### Container Setup Through `singularity`
 
-If a computer does not have either `podman`, or `docker`, and `singularity` is installed, or specifying the option `--singularity`, the script will build a Singularity sandbox for the given ML image, and run a container with the built sandbox. Just run "run-ml_container.sh -h" (click the expand icon ▶ for details)
+If a computer does not have either `podman`, or `docker`, and `singularity` is installed, or specifying the option `--singularity`, 
+the script will build (which would take a while) a Singularity sandbox for the given ML image, and run a container with the built sandbox. 
+Just run "run-ml_container.sh -h" (click the expand icon ▶ for details)
 
 <details>
 <summary>run-ml_container.sh -h</summary>
