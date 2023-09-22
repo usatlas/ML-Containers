@@ -493,7 +493,8 @@ def printMe(args):
     myImageInfo = getMyImageInfo(args.shellFilename)
     contCmd = myImageInfo["contCmd"]
     linesCondaHistory = myImageInfo.pop("linesCondaHistory")
-    myImageInfo.pop("runOpt")
+    if "runOpt" in myImageInfo:
+       myImageInfo.pop("runOpt")
     pp = pprint.PrettyPrinter(indent=4)
     print("The image/container used in the current work directory:")
     pp.pprint(myImageInfo)
@@ -503,7 +504,7 @@ def printMe(args):
        contNamePath = myImageInfo["contName"]
     pkgs, channels = listNewPkgs(contCmd, contNamePath, linesCondaHistory)
     if len(pkgs) > 0:
-       print("\nThe following pkgs and their dependencies are installed")
+       print("\nThe following additional pkgs and their dependencies are installed")
        pp.pprint(pkgs)
     if len(channels) > 0:
        print("\nThe following channels besides the default channel 'conda-forge' are needed")
