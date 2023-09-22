@@ -876,12 +876,12 @@ To install new pkg(s), run "micromamba install pkg1 [pkg2 ...]"
 
 If a computer does not have either `podman`, or `docker`, and `singularity` is installed, or specifying the option `--singularity`, 
 the script will build (which would take a while) a Singularity sandbox for the given ML image, and run a container with the built sandbox. 
-Just run "run-ml_container.sh -h" (click the expand icon ▶ for details)
+Just run "./run-ml_container.sh --sing ml-base" (click the expand icon ▶ for details)
 
 <details>
-<summary>run-ml_container.sh -h</summary>
+<summary>./run-ml_container.sh --sing ml-base</summary>
 <blockquote><pre>
-$ ./run-ml_container.sh --sing ml-base                     
+$ source ./run-ml_container.sh --sing ml-base                     
 Found the image name= ml-base:centos7-python38  with the dockerPath= docker.io/yesw2000/ml-base:centos7-python38
 
 Building Singularity sandbox
