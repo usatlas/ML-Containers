@@ -823,7 +823,7 @@ The image/container used in the current work directory:
     'imageLastUpdate': '2023-09-07T14:43:58.171805Z',
     'imageName': 'ml-base:centos7-python38'}
 
-The following pkgs and their dependencies are installed
+The following additional pkgs and their dependencies are installed
 ['dask']
 ```
 
