@@ -480,7 +480,7 @@ Found image name= ml-base:centos7-python38
 
 ### Container/Sandbox Setup
 
-It supports 3 types of container commands: **podman**, **docker**, and **singularity**. The script will pick up one automatically based on the availability. You can specify an option to choose one. Just run "**source run-ml_container.sh setup -h**" for more details.
+The script supports 3 types of container commands: **podman**, **docker**, and **singularity**. The script will pick up one automatically based on the availability. You can specify an option to choose one. Run "**source run-ml_container.sh setup -h**" for more details.
 
 > usage: run-ml_container.sh setup [-h] [--podman | --docker | --singularity]
 >                                  [-f]  \<ImageName\>
@@ -829,7 +829,7 @@ The following pkgs and their dependencies are installed
 
 #### Container Setup Through `docker`
 
-If a computer has `docker`, but no `podman`, running "**./run-ml_container.sh ml-base**" will create a container with the image *ml-base*, and enter into the created container:
+If a computer has `docker`, but no `podman`, running "**./run-ml_container.sh ml-base**" will create a container of the image *ml-base*, and enter into the created container:
 
 ```shell
 $ ./run-ml_container.sh ml-base
