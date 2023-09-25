@@ -591,7 +591,7 @@ def main():
     sp_printMe = sp.add_parser('printMe', help='print the container/sandbox set up for the work directory')
     sp_printMe.set_defaults(func=printMe)
 
-    sp_update = sp.add_parser('update', help='check if the container/sandbox here is up-to-date, update it needed and -f in place')
+    sp_update = sp.add_parser('update', help='check if the container/sandbox here is up-to-date, update it needed and -f applied')
     sp_update.add_argument('-f', '--force', action='store_true', default=False, help="Force to override the existing container/sandbox")
     sp_update.set_defaults(func=update)
 
