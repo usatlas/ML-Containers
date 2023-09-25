@@ -42,6 +42,7 @@ fi
 '''
 
 import os, sys
+import getpass
 pythonMajor = sys.version_info[0]
 import argparse
 import re
@@ -466,7 +467,7 @@ def setup(args):
     elif contCmd == "podman" or contCmd == "docker":
        testCmd = "%s info" % contCmd
        out = run_shellCmd(testCmd)
-       contName = '_'.join([os.getlogin(), imageName, tagName])
+       contName = '_'.join([getpass.getuser(), imageName, tagName])
 
        create_container(contCmd, contName, dockerPath, args.force)
        write_dockerSetup(args.shellFilename, imageFullName, dockerPath, 
@@ -526,6 +527,9 @@ def update(args):
     if latestUpdate > myImageUpdate and myImageDigest != latestDigest:
        print("Update is available with the last update date=%s" % latestUpdate)
        print("\twith the corresponding image digest =", latestDigest)
+       if not args.force:
+          print("\nIf you like to update, please add the option '-f' in the command")
+          sys.exit(0)
     else:
        print("The current container/sandbox is already up-to-date")
        sys.exit(0)
@@ -584,10 +588,11 @@ def main():
     sp_getImageInfo.add_argument('name', metavar='<ImageName>')
     sp_getImageInfo.set_defaults(func=getImageInfo)
 
-    sp_printMe = sp.add_parser('printMe', help='print the container/image set up for the work directory')
+    sp_printMe = sp.add_parser('printMe', help='print the container/sandbox set up for the work directory')
     sp_printMe.set_defaults(func=printMe)
 
-    sp_update = sp.add_parser('update', help='(not ready yet) check if the container/image here is up-to-date and update it needed')
+    sp_update = sp.add_parser('update', help='check if the container/sandbox here is up-to-date, update it needed and -f in place')
+    sp_update.add_argument('-f', '--force', action='store_true', default=False, help="Force to override the existing container/sandbox")
     sp_update.set_defaults(func=update)
 
     sp_setup = sp.add_parser('setup', help='create a container/sandbox for the given image', 
