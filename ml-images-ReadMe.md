@@ -412,9 +412,9 @@ positional arguments:
     listImages          list all available ML images
     listPackages        list packages in the given image
     getImageInfo        get image size. last update date and SHA256 hash of the given image
-    printMe             print the container/image set up for the work directory
-    update              (not ready yet) check if the container/image here is up-to-date and
-                        update it needed
+    printMe             print the container/sandbox set up for the work directory
+    update              check if the container/sandbox here is up-to-date,
+                        update it needed and the option -f applied
     setup               create a container/sandbox for the given image
 
 optional arguments:
