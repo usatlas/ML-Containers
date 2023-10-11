@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-10-10-r01
+# version=2023-10-11-r01
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
 ret=0
@@ -72,31 +72,27 @@ else:
 URL_MYSELF = "https://raw.githubusercontent.com/usatlas/ML-Containers/main/run-ml_container.sh"
 CONTAINER_CMDS = ['podman', 'docker', 'singularity']
 DOCKERHUB_REPO = "https://hub.docker.com/v2/repositories/"
+IMAGE_CENTOS7_PY38 = {
+        "dockerPath": "docker.io/yesw2000/{FullName}",
+              "listURL":"https://raw.githubusercontent.com/usatlas/ML-Containers/main/centos7/{Name}/python38/list-of-pkgs-inside.txt",
+              "cvmfsPath": ["/cvmfs/atlas.sdcc.bnl.gov/users/yesw/singularity/centos7-py38/{Name}",
+                            "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/{FullName}"]
+}
+IMAGE_CENTOS7_PY39 = {
+        "dockerPath": "docker.io/yesw2000/{FullName}",
+              "listURL":"https://raw.githubusercontent.com/usatlas/ML-Containers/main/centos7/{Name}/python39/list-of-pkgs-inside.txt",
+              "cvmfsPath": ["/cvmfs/atlas.sdcc.bnl.gov/users/yesw/singularity/centos7-py39/{Name}",
+                            "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/{FullName}"]
+}
 IMAGE_CONFIG = {
-    "ml-base:centos7-python38":
-        {"dockerPath": "docker.io/yesw2000/{FullName}",
-              "listURL":"https://raw.githubusercontent.com/usatlas/ML-Containers/main/centos7/{Name}/list-of-pkgs-inside.txt",
-              "cvmfsPath": ["/cvmfs/atlas.sdcc.bnl.gov/users/yesw/singularity/centos7-py38/{Name}",
-                            "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/{FullName}"]
-        },
-    "ml-pyroot:centos7-python38":
-        {"dockerPath": "docker.io/yesw2000/{FullName}",
-              "listURL":"https://raw.githubusercontent.com/usatlas/ML-Containers/main/centos7/{Name}/list-of-pkgs-inside.txt",
-              "cvmfsPath": ["/cvmfs/atlas.sdcc.bnl.gov/users/yesw/singularity/centos7-py38/{Name}",
-                            "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/{FullName}"]
-        },
-    "ml-tensorflow-cpu:centos7-python38":
-        {"dockerPath": "docker.io/yesw2000/{FullName}",
-              "listURL":"https://raw.githubusercontent.com/usatlas/ML-Containers/main/centos7/{Name}/list-of-pkgs-inside.txt",
-              "cvmfsPath": ["/cvmfs/atlas.sdcc.bnl.gov/users/yesw/singularity/centos7-py38/{Name}",
-                            "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/{FullName}"]
-        },
-    "ml-tensorflow-gpu:centos7-python38":
-        {"dockerPath": "docker.io/yesw2000/{FullName}",
-              "listURL":"https://raw.githubusercontent.com/usatlas/ML-Containers/main/centos7/{Name}/list-of-pkgs-inside.txt",
-              "cvmfsPath": ["/cvmfs/atlas.sdcc.bnl.gov/users/yesw/singularity/centos7-py38/{Name}",
-                            "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/{FullName}"]
-        }
+    "ml-base:centos7-python38":IMAGE_CENTOS7_PY38,
+    "ml-pyroot:centos7-python38":IMAGE_CENTOS7_PY38,
+    "ml-tensorflow-cpu:centos7-python38":IMAGE_CENTOS7_PY38,
+    "ml-tensorflow-gpu:centos7-python38":IMAGE_CENTOS7_PY38,
+    "ml-base:centos7-python39":IMAGE_CENTOS7_PY39,
+    "ml-pyroot:centos7-python39":IMAGE_CENTOS7_PY39,
+    "ml-tensorflow-cpu:centos7-python39":IMAGE_CENTOS7_PY39,
+    "ml-tensorflow-gpu:centos7-python39":IMAGE_CENTOS7_PY39,
 }
 
 
@@ -251,19 +247,27 @@ def getImageInfo(args, imageFullName=None, printOut=True):
 
 def listPackages(args):
     images_found = list_FoundImages(args.name)
-    if len(images_found) == 0:
+    n_images_found = len(images_found)
+    if n_images_found == 0:
        print("\n!!Warning!! imageName=%s is NOT found.\n" % args.name) 
        listImages()
+       sys.exit(1)
+    elif n_images_found > 1:
+       print("\n!!Warning!! Multiple matched images found=\n", images_found)
+       print("\nPlease rerun this command with a specific image")
        sys.exit(1)
 
     for imageName in images_found:
        baseName = imageName.split(':')[0]
        print("\nFound imageName=",imageName, " with the following installed pkgs:")
        url = IMAGE_CONFIG[imageName]["listURL"].replace("{Name}",baseName)
-       resource = urlopen(url)
-       content = resource.read().decode('utf-8')
-       print(content)
-
+       try:
+          resource = urlopen(url)
+          content = resource.read().decode('utf-8')
+          print(content)
+       except:
+          print("Failed in opening the following URL", url)
+          sys.exit(1)
 
 def listNewPkgs(contCmd, contNamePath, lastLineN):
     history = "/opt/conda/conda-meta/history"
