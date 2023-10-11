@@ -1,5 +1,6 @@
 #!/bin/bash
 # coding: utf-8
+# version=2023-10-10-r01
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
 ret=0
@@ -15,6 +16,9 @@ mySetup=runMe-here.sh
 
 if [[ -e $mySetup && ( $# -eq 0 || "$@" =~ "--rerun" ) ]]; then
    source $mySetup
+   ret=$?
+elif [[ $# -eq 1 && "$1" =~ ^[Jj]upyter$ ]]; then
+   source $mySetup jupyter
    ret=$?
 else
    if [ "X" != "X$BASH_SOURCE" ]; then
@@ -41,26 +45,31 @@ fi
 [[ $sourced == 1 ]] && return $ret || exit $ret
 '''
 
-import os, sys
 import getpass
+import os
+import sys
+
 pythonMajor = sys.version_info[0]
 import argparse
-import re
-import pprint
-import json
-import subprocess
 import ast
+import json
+import pprint
+import re
+import subprocess
 from time import sleep
+
 if pythonMajor < 3:
-   from urllib import urlopen
    from distutils.spawn import find_executable as which
+   from urllib import urlopen
+   from requests import Request
    from commands import getstatusoutput
 else:
-   from urllib.request import urlopen
    from shutil import which
    from subprocess import getstatusoutput
+   from urllib.request import urlopen, Request
 
 
+URL_MYSELF = "https://raw.githubusercontent.com/usatlas/ML-Containers/main/run-ml_container.sh"
 CONTAINER_CMDS = ['podman', 'docker', 'singularity']
 DOCKERHUB_REPO = "https://hub.docker.com/v2/repositories/"
 IMAGE_CONFIG = {
@@ -103,7 +112,7 @@ def set_default_subparser(parser, default_subparser, index_action=1):
 
     subparser_found = False
     for arg in sys.argv[1:]:
-        if arg in ['-h', '--help']:  # global help if no subparser
+        if arg in ['-h', '--help', '--version']:  # global help or version, no default subparser
             break
     else:
         for x in parser._subparsers._actions:
@@ -115,6 +124,51 @@ def set_default_subparser(parser, default_subparser, index_action=1):
         if not subparser_found:
             # insert default in first position before all other arguments
             sys.argv.insert(index_action, default_subparser) 
+
+
+def getVersion(myFile=None):
+    isFileOpen = False
+    if myFile is None:
+       myScript =  os.path.abspath(sys.argv[0])
+       myFile = open(myScript, 'r')
+       isFileOpen = True
+    no = 0
+    version = None
+    for line in myFile:
+        no += 1
+        if no > 10:
+           break
+        if re.search('^#.* version', line):
+           version = line.split('=')[1]
+           break
+
+    if isFileOpen:
+       myFile.close()
+
+    return version
+
+
+def selfUpdate(args):
+    currentVersion = getVersion()
+
+    resource = urlopen(URL_MYSELF)
+    content = resource.read().decode('utf-8')
+    latestVersion = getVersion(content)
+    if latestVersion is not None:
+       if currentVersion is None or latestVersion > currentVersion:
+          myScript =  os.path.abspath(sys.argv[0])
+          os.rename(myScript, myScript + '.old')
+          try:
+             myfile = open(myScript, 'w')
+             myfile.write(content)
+             myfile.close()
+          except Exception:
+             err = sys.exc_info()[1]
+             print("Failed to write out the latest version of this script\n", err)
+             print("Keep the current version")
+             os.rename(myScript + '.old', myScript) 
+    else:
+       print("No update is available")
 
 
 def run_shellCmd(shellCmd, exitOnFailure=True):
@@ -144,7 +198,7 @@ def list_FoundImages(name):
 
 
 def getImageInfo(args, imageFullName=None, printOut=True):
-    if imageFullName == None:
+    if imageFullName is None:
        images_found = list_FoundImages(args.name)
        if len(images_found) == 0:
           print("\n!!Warning!! imageName=%s is NOT found.\n" % args.name) 
@@ -167,6 +221,10 @@ def getImageInfo(args, imageFullName=None, printOut=True):
            json_tag = dict_tag
            break
     if json_tag:
+       labels = getImageLabels(imageName, tagName)
+       for labelName in ['imageRawSize', 'imageVersion']:
+           if labelName in labels:
+              json_tag[labelName] = labels[labelName]
        # pp = pprint.PrettyPrinter(indent=4)
        # pp.pprint(json_tag)
        imageSize  = json_tag['full_size']
@@ -175,10 +233,17 @@ def getImageInfo(args, imageFullName=None, printOut=True):
        if printOut:
           print("Found image name= %s\n" % imageFullName)
           print(" Image compressed size=", imageSize)
+          if "imageRawSize" in json_tag:
+             print("        Image raw size=", json_tag['imageRawSize'])
+             print("          imageVersion=", json_tag['imageVersion'])
           print(" Last  update UTC time=", lastUpdate)
           print("     Image SHA256 hash=", imageDigest)
        else:
-          return {"imageSize":imageSize, "lastUpdate":lastUpdate, "imageDigest":imageDigest}
+          if "imageRawSize" in json_tag:
+             return {"imageSize":imageSize, "imageRawSize":json_tag['imageRawSize'], 
+                     "imageVersion":json_tag['imageVersion'], "lastUpdate":lastUpdate, "imageDigest":imageDigest}
+          else:
+             return {"imageSize":imageSize, "lastUpdate":lastUpdate, "imageDigest":imageDigest}
     else:
        print("!!Warning!! No tag name=%s is found for the image name=%s" % (tagName, imageName) )
        sys,exit(1)
@@ -316,7 +381,11 @@ dockerPath=%s
 sandboxPath=%s
 runOpt="%s"
 if [ -e $sandboxPath/entrypoint.sh ]; then
-   runCmd="singularity run $runOpt $sandboxPath"
+   if [[ $# -eq 1 && "$1" =~ ^[Jj]upyter$ ]]; then
+      runCmd="singularity exec $runOpt $sandboxPath jupyter lab"
+   else
+      runCmd="singularity run $runOpt $sandboxPath"
+   fi
    echo -e "\\n$runCmd\\n"
    eval $runCmd
 else
@@ -333,6 +402,10 @@ fi
 def create_container(contCmd, contName, dockerPath, force=False):
     pullCmd = "%s pull %s" % (contCmd, dockerPath)
     retCode = subprocess.call(pullCmd.split())
+    username = getpass.getuser()
+    home = os.path.expanduser("~")
+    jupyterOpt = "-p 8888:8888 -e NB_USER=%s -e HOME=%s -v %s:%s" % (username, home, home, home)
+    jupyterOpt += " -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro"
     if retCode != 0:
        print("!!Warning!! Pulling the image %s failed, exit now" % dockerPath)
        sys.exit(1)
@@ -348,8 +421,9 @@ def create_container(contCmd, contName, dockerPath, force=False):
           sys.exit(1)
 
     pwd = os.getcwd()
-    createCmd = "%s create -it -v %s:%s -w %s --name %s %s" % \
-                (contCmd, pwd, pwd, pwd, contName, dockerPath)
+    createOpt = "-it -v %s:%s -w %s %s" % (pwd, pwd, pwd, jupyterOpt)
+    createCmd = "%s create %s --name %s %s" % \
+                (contCmd, createOpt, contName, dockerPath)
     out = run_shellCmd(createCmd)
 
     startCmd = "%s start %s" % (contCmd, contName)
@@ -377,6 +451,8 @@ imageDigest=%s
 dockerPath=%s
 linesCondaHistory=%s
 contName=%s
+jupyterOpt="-p 8888:8888 -e NB_USER=$USER -e HOME=$HOME -v ${HOME}:${HOME}"
+jupyterOpt="$jupyterOpt -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro"
 re_exited="ago[\ ]+Exited"
 re_up="ago[\ ]+Up"
 
@@ -393,14 +469,22 @@ elif [[ "$listOut" =~ $re_up ]]; then
       eval $unpauseCmd >/dev/null
    fi
 else
-   createCmd="$contCmd create -it -v $PWD:$PWD -w $PWD --name $contName $dockerPath"
+   createCmd="$contCmd create -it -v $PWD:$PWD -w $PWD $jupyterOpt --name $contName $dockerPath"
    echo -e "\\n$createCmd"
    eval $createCmd >/dev/null
    startCmd="$contCmd start $contName"
    echo -e "\\n$startCmd"
    eval $startCmd >/dev/null
 fi
-runCmd="$contCmd exec -it $contName /bin/bash"
+
+if [[ $# -eq 1 && "$1" =~ ^[Jj]upyter$ ]]; then
+   uid=$(id -u)
+   gid=$(id -g)
+   runCmd="$contCmd exec -it -u ${uid}:${gid} -e USER=$USER $contName jupyter lab --ip 0.0.0.0"
+else
+   runCmd="$contCmd exec -it $contName /bin/bash"
+fi
+
 echo -e "\\n$runCmd\\n"
 eval $runCmd
 """ % (contCmd, imageName, imageSize, lastUpdate, imageDigest, 
@@ -428,7 +512,7 @@ def setup(args):
     contCmds = []
     for cmd in CONTAINER_CMDS:
         cmdFound = which(cmd)
-        if cmdFound != None:
+        if cmdFound is not None:
            contCmds += [cmd]
 
     if len(contCmds) == 0:
@@ -437,7 +521,7 @@ def setup(args):
        sys.exit(1)
 
     contCmd = contCmds[0]
-    if args.contCmd != None:
+    if args.contCmd is not None:
        if args.contCmd in contCmds:
           contCmd = args.contCmd
        else:
@@ -466,7 +550,7 @@ def setup(args):
 
     elif contCmd == "podman" or contCmd == "docker":
        testCmd = "%s info" % contCmd
-       out = run_shellCmd(testCmd)
+       run_shellCmd(testCmd)
        contName = '_'.join([getpass.getuser(), imageName, tagName])
 
        create_container(contCmd, contName, dockerPath, args.force)
@@ -479,7 +563,6 @@ def setup(args):
 def getMyImageInfo(filename):
     shellFile = open(filename, 'r')
     myImageInfo = {}
-    contCmd = None
     for line in shellFile:
        if re.search(r'^(cont|image|docker|sand|runOpt|lines).*=', line):
           key, value = line.strip().split('=')
@@ -556,6 +639,43 @@ def update(args):
        install_newPkgs(contCmd, contNamePath, pkgs, channels)
 
 
+def jupyter(args):
+    if not os.path.exists(args.shellFilename):
+       print("No previous container/sandbox setup is found")
+       myScript =  os.path.abspath(sys.argv[0])
+       print("Please run 'source %s setup {ImageName}' first" % myScript)
+       return None
+
+
+# Get labels in a Docker image
+def getImageLabels(imageName, tag):
+
+    if imageName.find('/') < 0:
+       imageName = 'yesw2000/' + imageName
+    url_token = "https://auth.docker.io/token?scope=repository:%s:pull&service=registry.docker.io" % imageName
+    response = urlopen(url_token)
+    json_obj = json.loads(response.read().decode('utf-8'))
+    token = json_obj["token"]
+
+    url_digest = "https://registry-1.docker.io/v2/%s/manifests/%s" % (imageName, tag)
+    req =  Request(url_digest)
+    req.add_header('Accept', 'application/vnd.oci.image.manifest.v1+json')
+    req.add_header('Authorization', 'Bearer %s' % token)
+    response = urlopen(req)
+    json_obj = json.loads(response.read().decode('utf-8'))
+    digest = json_obj['config']['digest']
+
+    url_inspect = "https://registry-1.docker.io/v2/%s/blobs/%s" % (imageName, digest)
+    req =  Request(url_inspect)
+    req.add_header('Accept', 'application/vnd.oci.image.manifest.v1+json')
+    req.add_header('Authorization', 'Bearer %s' % token)
+    response = urlopen(req)
+    json_obj = json.loads(response.read().decode('utf-8'))
+    labels = json_obj['config']['Labels']
+
+    return labels
+
+
 def main():
 
     myScript =  os.path.basename( os.path.abspath(sys.argv[0]) )
@@ -575,6 +695,7 @@ def main():
     parser = argparse.ArgumentParser(epilog=example_global, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--shellFilename', action='store', help=argparse.SUPPRESS)
     parser.add_argument('--rerun', action='store_true', help="rerun the already setup container")
+    parser.add_argument('--version', action='store_true', help="print out the script version")
     sp = parser.add_subparsers(dest='command', help='Default=setup')
 
     sp_listImages = sp.add_parser('listImages', help='list all available ML images')
@@ -595,6 +716,9 @@ def main():
     sp_update.add_argument('-f', '--force', action='store_true', default=False, help="Force to override the existing container/sandbox")
     sp_update.set_defaults(func=update)
 
+    sp_update = sp.add_parser('selfUpdate', help='update the script itself')
+    sp_update.set_defaults(func=selfUpdate)
+
     sp_setup = sp.add_parser('setup', help='create a container/sandbox for the given image', 
                     epilog=example_setup, formatter_class=argparse.RawDescriptionHelpFormatter)
     group_cmd = sp_setup.add_mutually_exclusive_group()
@@ -607,7 +731,16 @@ def main():
     sp_setup.set_defaults(func=setup)
     set_default_subparser(parser, 'setup', 3)
 
+    sp_update = sp.add_parser('jupyter', help='run JupyterLab on the already created container/sandbox')
+    sp_update.set_defaults(func=jupyter)
+
     args, extra = parser.parse_known_args()
+
+    if args.version:
+       version = getVersion()
+       if version is not None:
+          print("Version=",version)
+       sys.exit(0)
 
     args.func(args)
 
