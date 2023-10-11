@@ -8,7 +8,7 @@
 
 # if [[ "X$X_MAMBA" == "X" ]]; then
    eval "$("${MAMBA_EXE}" shell hook --shell=bash)"
-   micromamba activate "${ENV_NAME}"
+   micromamba activate "${ENV_NAME:-base}"
 #   export X_MAMBA=$CONDA_DEFAULT_ENV
-   # export CONDA_PROMPT_MODIFIER="($ENV_NAME)"
+   # export CONDA_PROMPT_MODIFIER="(${ENV_NAME:-base})"
 # fi

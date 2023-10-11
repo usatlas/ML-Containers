@@ -10,7 +10,7 @@ RUN yum -y install which file git bzip2 \
 #
 ARG TF_ver=2.10
 ARG prefix=/opt/conda
-ARG Micromamba_ver=1.4.3
+ARG Micromamba_ver=1.5.1
 ARG PyVer=3.9
 ARG Mamba_exefile=bin/micromamba
 ENV MAMBA_EXE=/$Mamba_exefile MAMBA_ROOT_PREFIX=$prefix CONDA_PREFIX=$prefix
@@ -34,7 +34,7 @@ RUN curl -L https://micromamba.snakepit.net/api/micromamba/linux-64/$Micromamba_
 #   be installed as dependencies)
 #
 RUN micromamba install -y python=$PyVer pipenv \
-    uproot pandas scikit-learn seaborn plotly_express \
+    uproot pandas scikit-learn seaborn plotly_express scikit-hep=5.1.1 \
     && cd $prefix/bin && sed -i "1,3 s%${PWD}/python%/usr/bin/env python%" \
        $(file * | grep "script" | cut -d: -f1) \
     && micromamba clean -y -a -f
@@ -44,7 +44,7 @@ RUN micromamba install -y python=$PyVer pipenv \
 #
 # click, pyrsistent and rich, needed by jupyter-events
 #
-RUN micromamba install -y jupyterlab click pyrsistent rich \
+RUN micromamba install -y jupyterlab jupyterhub click pyrsistent rich \
     && cd $prefix \
     && sed -i "1,3 s%${PWD}/python%/usr/bin/env python%" \
        $(file bin/* | grep "script" | cut -d: -f1) \
@@ -75,9 +75,11 @@ RUN micromamba install -y zsh tcsh \
 
 # print out the package list into file /list-of-pkgs-inside.txt
 #
-RUN micromamba list |sed '1,2d' |tr -s ' ' |cut -d ' ' --fields=2,3 > /list-of-pkgs-inside.txt \
+RUN outfile=/list-of-pkgs-inside.txt \
+    && micromamba list |sed '1,2d' |tr -s ' ' |cut -d ' ' --fields=2,3 > $outfile \
     && yum list installed | egrep "^(which|file|git|bzip2)\." | \
-       tr -s ' ' |cut -d ' ' --fields=1,2 >> /list-of-pkgs-inside.txt
+       tr -s ' ' |cut -d ' ' --fields=1,2 >> $outfile \
+    && echo "micromamba $(micromamba --version)" >> $outfile
 
 # set PATH and LD_LIBRARY_PATH for the container
 #
@@ -108,6 +110,12 @@ RUN mkdir -p /.singularity.d/env \
 
 COPY entrypoint.sh /
 RUN chmod 755 /entrypoint.sh
-
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
+
+# Labels for the image version/rawSize
+ARG imageVersion=""
+ARG imageRawSize=""
+LABEL imageVersion=$imageVersion
+LABEL imageRawSize=$imageRawSize
+
