@@ -25,7 +25,7 @@ RUN curl -L https://micromamba.snakepit.net/api/micromamba/linux-64/$Micromamba_
     && micromamba config append --system channels conda-forge \
     && echo "source /usr/local/bin/_activate_current_env.sh" >> ~/.bashrc
 
-# install python38, pipenv
+# install python3, pipenv
 #
 # install uproot, pandas, scikit-learn,
 #         seaborn, plotly_express
@@ -33,9 +33,11 @@ RUN curl -L https://micromamba.snakepit.net/api/micromamba/linux-64/$Micromamba_
 #  (numpy, scipy, akward, matplotlib and plotly will 
 #   be installed as dependencies)
 #
+COPY python3-nohome $prefix/bin/
 RUN micromamba install -y python=$PyVer pipenv \
     uproot pandas scikit-learn seaborn plotly_express scikit-hep=5.1.1 \
-    && cd $prefix/bin && sed -i "1,3 s%${PWD}/python%/usr/bin/env python%" \
+    && cd $prefix/bin && chmod +x python3-nohome \
+    && sed -i "1,3 s%${PWD}/python%/usr/bin/env python%" \
        $(file * | grep "script" | cut -d: -f1) \
     && micromamba clean -y -a -f
 
@@ -44,16 +46,21 @@ RUN micromamba install -y python=$PyVer pipenv \
 #
 # click, pyrsistent and rich, needed by jupyter-events
 #
+COPY shellWrapper-for-python3-I.sh shellWrapper-for-python3-nohome.sh /tmp/
 RUN micromamba install -y jupyterlab jupyterhub click pyrsistent rich \
-    && cd $prefix \
+    && cd $prefix/bin \
+    && sed -i -e '1r/tmp/shellWrapper-for-python3-I.sh' -e '0,/coding:/d' jupyter* \
+    && sed -i -e '1r/tmp/shellWrapper-for-python3-nohome.sh' -e '0,/coding:/d' ipython \
+    && ln -s ipython ipython-nohome \
+    && rm -f /tmp/shellWrapper-for-python3-I.sh hellWrapper-for-python3-nohome.sh \
     && sed -i "1,3 s%${PWD}/python%/usr/bin/env python%" \
-       $(file bin/* | grep "script" | cut -d: -f1) \
+       $(file * | grep "script" | cut -d: -f1) \
     && cd $prefix/share/jupyter/kernels \
     && cp -pR python3 python3-usersite \
     && sed -i -e 's%: ".*(ipykernel)"%: "ML-Python3"%' \
-              -e 's#".*bin/python.*"#"/usr/bin/env", "python'${PyVer}'", "-s"#' python3/kernel.json \
+              -e 's#".*bin/python.*"#"python3-nohome", "-s"#' python3/kernel.json \
     && sed -i -e 's%: ".*(ipykernel)"%: "ML-Python3-usersite"%' \
-              -e 's#".*bin/python.*"#"/usr/bin/env", "python'${PyVer}'"#' python3-usersite/kernel.json \
+              -e 's#".*bin/python.*"#"python3-nohome"#' python3-usersite/kernel.json \
     && micromamba clean -y -a -f
 
 # install Gradient Boosting pkgs: lightgbm xgboost catboost
