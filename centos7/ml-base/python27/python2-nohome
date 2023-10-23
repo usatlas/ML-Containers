@@ -1,0 +1,5 @@
+#!/bin/bash
+myScript="${BASH_SOURCE:-$0}"
+myDir=$(dirname $myScript)
+myDir=$(readlink -f $myDir)
+PYTHONHOME=$myDir/.. $myDir/python2 "$@"
