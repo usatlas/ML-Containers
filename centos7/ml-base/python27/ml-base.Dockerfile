@@ -56,9 +56,9 @@ RUN micromamba install -y jupyterlab click pyrsistent \
        $(file * | grep "script" | cut -d: -f1) \
     && cd $prefix/share/jupyter/kernels \
     && cp -pR python2 python2-usersite \
-    && sed -i -e 's%: ".*(ipykernel)"%: "ML-Python3"%' \
+    && sed -i -e 's%"Python 2"%"ML-Python2"%' \
               -e 's#".*bin/python.*"#"python2-nohome", "-s"#' python2/kernel.json \
-    && sed -i -e 's%: ".*(ipykernel)"%: "ML-Python3-usersite"%' \
+    && sed -i -e 's%"Python 2"%"ML-Python2-usersite"%' \
               -e 's#".*bin/python.*"#"python2-nohome"#' python2-usersite/kernel.json \
     && micromamba clean -y -a -f
 

@@ -1,5 +1,5 @@
 #!/bin/bash
 myScript="${BASH_SOURCE:-$0}"
 myDir=$(dirname $myScript)
-myDir=$(readlink -f $myDir)
-PYTHONHOME=$myDir/.. $myDir/python2 "$@"
+myTop=$(readlink -f $myDir)
+PYTHONHOME=$myDir/.. PYTHONPATH=$myDir/../lib/python2.7/site-packages:${PYTHONPATH} $myDir/python2 -S "$@"
