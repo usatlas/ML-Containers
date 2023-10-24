@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-10-24-alpha01
+# version=2023-10-24-alpha02
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -147,7 +147,7 @@ def selfUpdate(args):
 
     resource = urlopen(URL_MYSELF)
     content = resource.read().decode('utf-8')
-    latestVersion = getVersion(content)
+    latestVersion = getVersion(content.split('\n'))
     if latestVersion is not None:
        if currentVersion is None or latestVersion > currentVersion:
           myScript =  os.path.abspath(sys.argv[0])
