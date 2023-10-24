@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-10-24-alpha02
+# version=2023-10-24-alpha03
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -150,12 +150,14 @@ def selfUpdate(args):
     latestVersion = getVersion(content.split('\n'))
     if latestVersion is not None:
        if currentVersion is None or latestVersion > currentVersion:
+          print("Update available, updating the script itself")
           myScript =  os.path.abspath(sys.argv[0])
           os.rename(myScript, myScript + '.old')
           try:
              myfile = open(myScript, 'w')
              myfile.write(content)
              myfile.close()
+             print("Update finished")
           except Exception:
              err = sys.exc_info()[1]
              print("Failed to write out the latest version of this script\n", err)
