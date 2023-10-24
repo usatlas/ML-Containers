@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-10-24-alpha03
+# version=2023-10-24-beta01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -125,8 +125,8 @@ def parseArgTags(inputArgs, requireRelease=False):
     for arg in inputArgs:
         argTags += re.split(',|:', arg)
     for tag in argTags:
-       if tag in ATLAS_PROJECTS:
-          releaseTags['project'] = tag
+       if tag.lower() in ATLAS_PROJECTS:
+          releaseTags['project'] = tag.lower()
        # elif tag == 'latest' or tag[0].isdigit():
        else:
           releaseTags['release'] = tag
@@ -272,13 +272,14 @@ def build_sandbox(sandboxPath, dockerPath, force=False):
 
 
 # write setup for Singularity sandbox
-def write_sandboxSetup(filename, imageInfo, sandboxPath, runOpt):
+def write_sandboxSetup(filename, inputArgs, imageInfo, sandboxPath, runOpt):
     imageSize = imageInfo["imageCompressedSize"]
     dockerPath = imageInfo["dockerPath"]
     lastUpdate = imageInfo["lastUpdate"]
     myScript =  os.path.abspath(sys.argv[0])
     shellFile = open(filename, 'w')
     shellFile.write("""
+inputArgs="%s"
 contCmd=singularity
 dockerPath=%s
 imageCompressedSize=%s
@@ -306,7 +307,7 @@ else
    echo "Please rebuild the Singularity sandbox by running the following"
    echo -e "\n\t source %s $imageName"
 fi
-""" % (dockerPath, imageSize, lastUpdate, sandboxPath, runOpt, myScript) )
+""" % (' '.join(inputArgs), dockerPath, imageSize, lastUpdate, sandboxPath, runOpt, myScript) )
     shellFile.close()
 
 
@@ -317,8 +318,9 @@ def create_container(contCmd, contName, imageInfo, force=False):
     retCode = subprocess.call(pullCmd.split())
     username = getpass.getuser()
     home = os.path.expanduser("~")
-    jupyterOpt = "-p 8888:8888 -e NB_USER=%s -e HOME=%s -v %s:%s" % (username, home, home, home)
-    jupyterOpt += " -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro"
+    jupyterOpt = ""
+    # jupyterOpt = "-p 8888:8888 -e NB_USER=%s -e HOME=%s -v %s:%s" % (username, home, home, home)
+    # jupyterOpt += " -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro"
     if retCode != 0:
        print("!!Warning!! Pulling the image %s failed, exit now" % dockerPath)
        sys.exit(1)
@@ -344,7 +346,7 @@ def create_container(contCmd, contName, imageInfo, force=False):
 
 
 # write setup for Docker/Podman container
-def write_dockerSetup(filename, contCmd, contName, imageInfo, override=False):
+def write_dockerSetup(filename, inputArgs, contCmd, contName, imageInfo, override=False):
     imageSize = imageInfo["imageCompressedSize"]
     dockerPath = imageInfo["dockerPath"]
     lastUpdate = imageInfo["lastUpdate"]
@@ -363,6 +365,7 @@ def write_dockerSetup(filename, contCmd, contName, imageInfo, override=False):
 
     shellFile = open(filename, 'w')
     shellFile.write("""
+inputArgs="%s"
 contCmd=%s
 dockerPath=%s
 imageCompressedSize=%s
@@ -419,7 +422,7 @@ fi
 stopCmd="$contCmd stop $contName"
 echo -e "\\n$stopCmd"
 eval $stopCmd
-""" % (contCmd, dockerPath, imageSize, lastUpdate, contName) )
+""" % (' '.join(inputArgs), contCmd, dockerPath, imageSize, lastUpdate, contName) )
     shellFile.close()
 
 
@@ -459,7 +462,7 @@ def setup(args):
        sandboxPath = "singularity/%s-%s" % (project, release)
        build_sandbox(sandboxPath, dockerPath, args.force)
        runOpt = ''
-       write_sandboxSetup(args.shellFilename, imageInfo, sandboxPath, runOpt)
+       write_sandboxSetup(args.shellFilename, args.tags, imageInfo, sandboxPath, runOpt)
 
     elif contCmd == "podman" or contCmd == "docker":
        testCmd = "%s info" % contCmd
@@ -467,7 +470,7 @@ def setup(args):
        contName = '_'.join([getpass.getuser(), project, release])
 
        create_container(contCmd, contName, imageInfo, args.force)
-       write_dockerSetup(args.shellFilename, contCmd, contName, imageInfo, args.force)
+       write_dockerSetup(args.shellFilename, args.tags, contCmd, contName, imageInfo, args.force)
 
     sleep(1)
 
