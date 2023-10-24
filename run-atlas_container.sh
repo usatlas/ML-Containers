@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-10-21-alpha01
+# version=2023-10-24-alpha01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -58,6 +58,7 @@ import pprint
 import re
 import subprocess
 from time import sleep
+import fnmatch
 
 from shutil import which
 from subprocess import getstatusoutput
@@ -126,10 +127,10 @@ def parseArgTags(inputArgs, requireRelease=False):
     for tag in argTags:
        if tag in ATLAS_PROJECTS:
           releaseTags['project'] = tag
-       elif tag == 'latest' or tag[0].isdigit():
-          releaseTags['release'] = tag
+       # elif tag == 'latest' or tag[0].isdigit():
        else:
-          print("!!Warning!! Unrecognized input arg=", tag)
+          releaseTags['release'] = tag
+          # print("!!Warning!! Unrecognized input arg=", tag)
 
     if 'project' not in releaseTags:
        print("!!Warning!! No project is provided from the choice of ", ATLAS_PROJECTS)
@@ -161,7 +162,7 @@ def selfUpdate(args):
              print("Keep the current version")
              os.rename(myScript + '.old', myScript) 
     else:
-       print("No update is available")
+       print("Already up-to-date, no update needed")
 
 
 def run_shellCmd(shellCmd, exitOnFailure=True):
@@ -171,16 +172,6 @@ def run_shellCmd(shellCmd, exitOnFailure=True):
        print("\t", shellCmd)
        sys.exit(1)
     return out
-
-
-def list_FoundImages(name):
-    images = list(IMAGE_CONFIG.keys())
-    images_found = []
-    for imageFullName in images:
-        imageBaseName = imageFullName.split(':')[0]
-        if imageFullName == name or imageBaseName == name:
-           images_found += [imageFullName]
-    return images_found
 
 
 def listImageTags(project):
@@ -210,6 +201,31 @@ def listImageTags(project):
     return imageTags
            
 
+def listReleases(args):
+    releaseTags = parseArgTags(args.tags, requireRelease=False)
+    project = releaseTags['project']
+    if 'release' in releaseTags:
+       release = releaseTags['release']
+    else:
+       release = None
+    imageTags = listImageTags(project)
+    releasePrint = ""
+    if release is None:
+       tags = list(imageTags.keys())
+    else:
+       tags = []
+       releasePrint = " matching release=%s" % release
+       for tagKey in imageTags.keys():
+           if fnmatch.fnmatch(tagKey, release):
+              tags += [ tagKey ]
+    if len(tags) > 0:
+       pp = pprint.PrettyPrinter(indent=4, compact=True)
+       print("Found the following release container list for the project=", project, releasePrint)
+       pp.pprint(tags)
+    else:
+       print("No release container found for the project=", project, releasePrint)
+
+
 def getImageInfo(project, release, printOut=True):
     imageInfo = {}
     imageTags = listImageTags(project)
@@ -223,7 +239,9 @@ def getImageInfo(project, release, printOut=True):
 
     if len(imageInfo) > 0 and printOut:
        print("Found an image")
-       print("\tdockerPath=", imageInfo['dockerPath'], "; image compressed size=", imageInfo['imageCompressedSize'])
+       print("\tdockerPath=", imageInfo['dockerPath'], 
+             "; image compressed size=", imageInfo['imageCompressedSize'],
+             "\n\tlast update time=", imageInfo['lastUpdate'])
     return imageInfo
     
 
@@ -490,9 +508,10 @@ def main():
     example_global = """Examples:
 
   source %s listReleases AthAnalysis
+  source %s listReleases AthAnalysis,"21.2.2*"
   source %s AnalysisBase:21.2.132
   source %s            # Empty arg to rerun the already setup container
-  source %s setup AnalysisBase,21.2.132""" % (myScript, myScript, myScript, myScript)
+  source %s setup AnalysisBase,21.2.132""" % ((myScript,)*5)
 
     example_setup = """Examples:
 
@@ -506,8 +525,9 @@ def main():
     sp = parser.add_subparsers(dest='command', help='Default=setup')
 
     sp_listReleases = sp.add_parser('listReleases', help='list all available ATLAS releases of a given project')
-    sp_listReleases.add_argument('projectName', metavar='<ProjectName>', help='Project name to list releases')
-    # sp_listReleases.set_defaults(func=listReleases)
+    # sp_listReleases.add_argument('projectName', metavar='<ProjectName>', help='Project name to list releases')
+    sp_listReleases.add_argument('tags', nargs='+', metavar='<ReleaseTags>', help='Project name to list releases, and release number with wildcard *')
+    sp_listReleases.set_defaults(func=listReleases)
 
     sp_printImageInfo = sp.add_parser('printImageInfo', help='print the image size and last update date of the given image')
     sp_printImageInfo.add_argument('tags', nargs='+', metavar='<ReleaseTags>')
