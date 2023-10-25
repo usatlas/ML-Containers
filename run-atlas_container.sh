@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-10-24-beta01
+# version=2023-10-25-beta01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -163,8 +163,9 @@ def selfUpdate(args):
              print("Failed to write out the latest version of this script\n", err)
              print("Keep the current version")
              os.rename(myScript + '.old', myScript) 
-    else:
-       print("Already up-to-date, no update needed")
+          return
+
+    print("Already up-to-date, no update needed")
 
 
 def run_shellCmd(shellCmd, exitOnFailure=True):
