@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-10-11-r01
+# version=2023-10-25-r01
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
 ret=0
@@ -128,6 +128,10 @@ def getVersion(myFile=None):
        myScript =  os.path.abspath(sys.argv[0])
        myFile = open(myScript, 'r')
        isFileOpen = True
+    else:
+       if isinstance(myFile, str):
+          myFile = myFile.split('\n')
+
     no = 0
     version = None
     for line in myFile:
@@ -152,19 +156,22 @@ def selfUpdate(args):
     latestVersion = getVersion(content)
     if latestVersion is not None:
        if currentVersion is None or latestVersion > currentVersion:
+          print("Update available, updating the script itself")
           myScript =  os.path.abspath(sys.argv[0])
           os.rename(myScript, myScript + '.old')
           try:
              myfile = open(myScript, 'w')
              myfile.write(content)
              myfile.close()
+             print("Update finished")
           except Exception:
              err = sys.exc_info()[1]
              print("Failed to write out the latest version of this script\n", err)
              print("Keep the current version")
              os.rename(myScript + '.old', myScript) 
-    else:
-       print("No update is available")
+          return
+
+    print("Already up-to-date, no update needed")
 
 
 def run_shellCmd(shellCmd, exitOnFailure=True):

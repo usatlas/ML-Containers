@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-10-25-beta01
+# version=2023-10-25-beta02
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -103,6 +103,10 @@ def getVersion(myFile=None):
        myScript =  os.path.abspath(sys.argv[0])
        myFile = open(myScript, 'r')
        isFileOpen = True
+    else:
+       if isinstance(myFile, str):
+          myFile = myFile.split('\n')
+
     no = 0
     version = None
     for line in myFile:
@@ -147,7 +151,7 @@ def selfUpdate(args):
 
     resource = urlopen(URL_MYSELF)
     content = resource.read().decode('utf-8')
-    latestVersion = getVersion(content.split('\n'))
+    latestVersion = getVersion(content)
     if latestVersion is not None:
        if currentVersion is None or latestVersion > currentVersion:
           print("Update available, updating the script itself")
