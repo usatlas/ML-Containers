@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-10-25-r01
+# version=2023-10-26-r01
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
 ret=0
@@ -503,6 +503,64 @@ eval $runCmd
     shellFile.close()
 
 
+def getMyImageInfo(filename):
+    shellFile = open(filename, 'r')
+    myImageInfo = {}
+    for line in shellFile:
+       if re.search(r'^(cont|image|docker|sand|runOpt|lines).*=', line):
+          key, value = line.strip().split('=')
+          myImageInfo[key] = value
+    return myImageInfo
+
+
+def printMe(args):
+    if not os.path.exists(args.shellFilename):
+       print("No previous container/sandbox setup is found")
+       return None
+    myImageInfo = getMyImageInfo(args.shellFilename)
+    contCmd = myImageInfo["contCmd"]
+    linesCondaHistory = myImageInfo.pop("linesCondaHistory")
+    if "runOpt" in myImageInfo:
+       myImageInfo.pop("runOpt")
+    pp = pprint.PrettyPrinter(indent=4)
+    print("The image/container used in the current work directory:")
+    pp.pprint(myImageInfo)
+    if contCmd == 'singularity':
+       contNamePath = myImageInfo["sandboxPath"]
+    else:
+       contNamePath = myImageInfo["contName"]
+    pkgs, channels = listNewPkgs(contCmd, contNamePath, linesCondaHistory)
+    if len(pkgs) > 0:
+       print("\nThe following additional pkgs and their dependencies are installed")
+       pp.pprint(pkgs)
+    if len(channels) > 0:
+       print("\nThe following channels besides the default channel 'conda-forge' are needed")
+       pp.pprint(channels)
+
+
+def cleanLast(filename):
+    if not os.path.exists(filename):
+       return
+
+    myImageInfo = getMyImageInfo(filename)
+    if len(myImageInfo) > 0:
+       contCmd = myImageInfo['contCmd']
+       if contCmd == 'singularity' or contCmd == 'apptainer':
+          sandboxPath = myImageInfo['sandboxPath']
+          print("Removing the last sandbox=", sandboxPath)
+          try:
+             rmtree(sandboxPath)
+          except:
+             pass
+          os.rename(filename, filename + '.last')
+       else:
+          contName = myImageInfo['contName']
+          print("Removing the last container=", contName)
+          rmCmd = "%s rm -f %s" % (contCmd, contName)
+          run_shellCmd(rmCmd, exitOnFailure=False)
+          os.rename(filename, filename + '.last')
+
+
 def setup(args):
     images = list_FoundImages(args.name)
     if len(images) == 0:
@@ -530,6 +588,8 @@ def setup(args):
        print("None of container running commands: docker, podman, singularity; exit now")
        print("Please install one of the above tool first")
        sys.exit(1)
+
+    cleanLast(args.shellFilename)
 
     contCmd = contCmds[0]
     if args.contCmd is not None:

@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-10-25-beta02
+# version=2023-10-26-beta01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -60,7 +60,7 @@ import subprocess
 from time import sleep
 import fnmatch
 
-from shutil import which
+from shutil import which, rmtree
 from subprocess import getstatusoutput
 from urllib.request import urlopen, Request
 
@@ -69,6 +69,27 @@ URL_MYSELF = "https://raw.githubusercontent.com/usatlas/ML-Containers/main/run-a
 CONTAINER_CMDS = ['podman', 'docker', 'singularity']
 ATLAS_PROJECTS = ['athena', 'analysisbase', 'athanalysis', 'analysistop', 'athanalysis']
 DOCKERHUB_REPO = "https://hub.docker.com/v2/repositories/atlas"
+
+
+class Version(str):
+
+  def __lt__(self, other):
+ 
+     va = re.split('[.-]', self)
+     vb = re.split('[.-]', other)
+
+     # print("va=",va, "; vb=",vb)
+
+     for i in range(min(len(va), len(vb))):
+         ai = va[i]
+         bi = vb[i]
+         if ai.isdigit() and bi.isdigit():
+            if ai != bi:
+               return int(ai) < int(bi)
+         elif ai != bi:
+            return ai < bi
+    
+     return len(va) < len(vb)
 
 
 def set_default_subparser(parser, default_subparser, index_action=1):
@@ -225,6 +246,7 @@ def listReleases(args):
        for tagKey in imageTags.keys():
            if fnmatch.fnmatch(tagKey, release):
               tags += [ tagKey ]
+    tags.sort(key=Version)
     if len(tags) > 0:
        pp = pprint.PrettyPrinter(indent=4, compact=True)
        print("Found the following release container list for the project=", project, releasePrint)
@@ -431,6 +453,52 @@ eval $stopCmd
     shellFile.close()
 
 
+def getMyImageInfo(filename):
+    shellFile = open(filename, 'r')
+    myImageInfo = {}
+    for line in shellFile:
+       if re.search(r'^(cont|image|docker|sand|runOpt|lines).*=', line):
+          key, value = line.strip().split('=')
+          myImageInfo[key] = value
+    return myImageInfo
+
+
+def printMe(args):
+    if not os.path.exists(args.shellFilename):
+       print("No previous container/sandbox setup is found")
+       return None
+    myImageInfo = getMyImageInfo(args.shellFilename)
+    contCmd = myImageInfo["contCmd"]
+    if "runOpt" in myImageInfo:
+       myImageInfo.pop("runOpt")
+    pp = pprint.PrettyPrinter(indent=4)
+    print("The image/container used in the current work directory:")
+    pp.pprint(myImageInfo)
+
+
+def cleanLast(filename):
+    if not os.path.exists(filename):
+       return
+
+    myImageInfo = getMyImageInfo(filename)
+    if len(myImageInfo) > 0:
+       contCmd = myImageInfo['contCmd']
+       if contCmd == 'singularity' or contCmd == 'apptainer':
+          sandboxPath = myImageInfo['sandboxPath']
+          print("Removing the last sandbox=", sandboxPath)
+          try:
+             rmtree(sandboxPath)
+          except:
+             pass
+          os.rename(filename, filename + '.last')
+       else:
+          contName = myImageInfo['contName']
+          print("Removing the last container=", contName)
+          rmCmd = "%s rm -f %s" % (contCmd, contName)
+          run_shellCmd(rmCmd, exitOnFailure=False)
+          os.rename(filename, filename + '.last')
+
+
 def setup(args):
     releaseTags = parseArgTags(args.tags, requireRelease=True)
     project = releaseTags['project']
@@ -450,6 +518,8 @@ def setup(args):
        print("None of container running commands: docker, podman, singularity; exit now")
        print("Please install one of the above tool first")
        sys.exit(1)
+
+    cleanLast(args.shellFilename)
 
     contCmd = contCmds[0]
     if args.contCmd is not None:
@@ -478,29 +548,6 @@ def setup(args):
        write_dockerSetup(args.shellFilename, args.tags, contCmd, contName, imageInfo, args.force)
 
     sleep(1)
-
-
-def getMyImageInfo(filename):
-    shellFile = open(filename, 'r')
-    myImageInfo = {}
-    for line in shellFile:
-       if re.search(r'^(cont|image|docker|sand|runOpt|lines).*=', line):
-          key, value = line.strip().split('=')
-          myImageInfo[key] = value
-    return myImageInfo
-
-
-def printMe(args):
-    if not os.path.exists(args.shellFilename):
-       print("No previous container/sandbox setup is found")
-       return None
-    myImageInfo = getMyImageInfo(args.shellFilename)
-    contCmd = myImageInfo["contCmd"]
-    if "runOpt" in myImageInfo:
-       myImageInfo.pop("runOpt")
-    pp = pprint.PrettyPrinter(indent=4)
-    print("The image/container used in the current work directory:")
-    pp.pprint(myImageInfo)
 
 
 def jupyter(args):
