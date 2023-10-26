@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-10-26-r01
+# version=2023-10-26-r02
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
 ret=0
@@ -410,7 +410,7 @@ fi
 
 
 # create docker/podman container
-def create_container(contCmd, contName, dockerPath, force=False):
+def create_container(contCmd, contName, dockerPath, bindOpt, force=False):
     pullCmd = "%s pull %s" % (contCmd, dockerPath)
     retCode = subprocess.call(pullCmd.split())
     username = getpass.getuser()
@@ -432,7 +432,7 @@ def create_container(contCmd, contName, dockerPath, force=False):
           sys.exit(1)
 
     pwd = os.getcwd()
-    createOpt = "-it -v %s:%s -w %s %s" % (pwd, pwd, pwd, jupyterOpt)
+    createOpt = "-it -v %s:%s -w %s %s %s" % (pwd, pwd, pwd, jupyterOpt, bindOpt)
     createCmd = "%s create %s --name %s %s" % \
                 (contCmd, createOpt, contName, dockerPath)
     out = run_shellCmd(createCmd)
@@ -442,7 +442,7 @@ def create_container(contCmd, contName, dockerPath, force=False):
 
 
 # write setup for Docker/Podman container
-def write_dockerSetup(filename, imageName, dockerPath, contCmd, contName, override=False):
+def write_dockerSetup(filename, imageName, dockerPath, contCmd, contName, bindOpt, override=False):
     imageInfo = getImageInfo(None, imageName, printOut=False)
     imageSize = imageInfo["imageSize"]
     lastUpdate = imageInfo["lastUpdate"]
@@ -462,6 +462,7 @@ imageDigest=%s
 dockerPath=%s
 linesCondaHistory=%s
 contName=%s
+runOpt="%s"
 jupyterOpt="-p 8888:8888 -e NB_USER=$USER -e HOME=$HOME -v ${HOME}:${HOME}"
 jupyterOpt="$jupyterOpt -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro"
 re_exited="ago[\ ]+Exited"
@@ -499,7 +500,7 @@ fi
 echo -e "\\n$runCmd\\n"
 eval $runCmd
 """ % (contCmd, imageName, imageSize, lastUpdate, imageDigest, 
-       dockerPath, linesCondaHistory, contName) )
+       dockerPath, linesCondaHistory, contName, bindOpt) )
     shellFile.close()
 
 
@@ -547,7 +548,7 @@ def cleanLast(filename):
        contCmd = myImageInfo['contCmd']
        if contCmd == 'singularity' or contCmd == 'apptainer':
           sandboxPath = myImageInfo['sandboxPath']
-          print("Removing the last sandbox=", sandboxPath)
+          print("\nRemoving the last sandbox=%s\n" % sandboxPath)
           try:
              rmtree(sandboxPath)
           except:
@@ -555,7 +556,7 @@ def cleanLast(filename):
           os.rename(filename, filename + '.last')
        else:
           contName = myImageInfo['contName']
-          print("Removing the last container=", contName)
+          print("\nRemoving the last container=%s\n" % contName)
           rmCmd = "%s rm -f %s" % (contCmd, contName)
           run_shellCmd(rmCmd, exitOnFailure=False)
           os.rename(filename, filename + '.last')
@@ -589,8 +590,6 @@ def setup(args):
        print("Please install one of the above tool first")
        sys.exit(1)
 
-    cleanLast(args.shellFilename)
-
     contCmd = contCmds[0]
     if args.contCmd is not None:
        if args.contCmd in contCmds:
@@ -601,6 +600,20 @@ def setup(args):
           print("\t",contCmds)
           sys,exit(1)
 
+    cleanLast(args.shellFilename)
+
+    paths = args.volume
+    volumes = []
+    if paths is not None:
+       pwd = os.getcwd()
+       home = os.path.expanduser("~")
+       for path in paths.split(','):
+           if os.path.samefile(pwd, path):
+              continue
+           elif contCmd == "singularity" and os.path.samefile(home, path):
+              continue 
+           volumes += [path]
+
     if contCmd == "singularity":
        if not os.path.exists("singularity"):
           os.mkdir("singularity")
@@ -610,6 +623,9 @@ def setup(args):
        imageFullPath = os.path.join(os.getcwd(), sandboxPath)
        runCmd = "singularity run -w %s" % imageFullPath
        runOpt = '-w'
+
+       for path in volumes:
+           runOpt += " -B %s" % path
 
        # Check if Home bind-mount works with --writable mode
        # if not, add the option --no-home
@@ -624,9 +640,16 @@ def setup(args):
        run_shellCmd(testCmd)
        contName = '_'.join([getpass.getuser(), imageName, tagName])
 
-       create_container(contCmd, contName, dockerPath, args.force)
+       bindOpt = ''
+       for path in volumes:
+           if path.find(':') > 0:
+              bindOpt += " -v %s" % path
+           else:
+              bindOpt += " -v %s:%s" % (path, path)
+
+       create_container(contCmd, contName, dockerPath, bindOpt, args.force)
        write_dockerSetup(args.shellFilename, imageFullName, dockerPath, 
-                         contCmd, contName, args.force)
+                         contCmd, contName, bindOpt, args.force)
 
     sleep(1)
 
@@ -678,6 +701,7 @@ def update(args):
     latestImageInfo = getImageInfo(None, myImageName, printOut=False)
     latestUpdate = latestImageInfo["lastUpdate"]
     latestDigest = latestImageInfo["imageDigest"]
+    runOpt = myImageInfo["runOpt"].strip('"')
     if latestUpdate > myImageUpdate and myImageDigest != latestDigest:
        print("Update is available with the last update date=%s" % latestUpdate)
        print("\twith the corresponding image digest =", latestDigest)
@@ -701,11 +725,11 @@ def update(args):
     if contCmd == 'singularity':
        build_sandbox(contNamePath, dockerPath, force=True)
        write_sandboxSetup(args.shellFilename, myImageName, dockerPath, \
-                                 contNamePath, myImageInfo["runOpt"].strip('"'))
+                                 contNamePath, runOpt)
     else:
-       create_container(contCmd, contNamePath, dockerPath, force=True)
+       create_container(contCmd, contNamePath, dockerPath, runOpt, force=True)
        write_dockerSetup(args.shellFilename, myImageName, dockerPath, \
-                                contCmd, contNamePath, override=True)
+                                contCmd, contNamePath, runOpt, override=True)
     if len(pkgs) > 0:
        install_newPkgs(contCmd, contNamePath, pkgs, channels)
 
@@ -798,6 +822,7 @@ def main():
                                action="store_const", const="%s" % cmd, 
                                help="Use %s to the container" % cmd)
     sp_setup.add_argument('-f', '--force', action='store_true', default=False, help="Force to override the existing container/sandbox")
+    sp_setup.add_argument('--volume', nargs='?', metavar='path[,srcPath:targePath]', help="Additional path(s) delimited by comma, to be mounted into the container")
     sp_setup.add_argument('name', metavar='<ImageName>', help='image name to run')
     sp_setup.set_defaults(func=setup)
     set_default_subparser(parser, 'setup', 3)

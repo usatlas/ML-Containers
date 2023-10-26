@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-10-26-beta01
+# version=2023-10-26-beta02
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -67,7 +67,7 @@ from urllib.request import urlopen, Request
 
 URL_MYSELF = "https://raw.githubusercontent.com/usatlas/ML-Containers/main/run-atlas_container.sh"
 CONTAINER_CMDS = ['podman', 'docker', 'singularity']
-ATLAS_PROJECTS = ['athena', 'analysisbase', 'athanalysis', 'analysistop', 'athanalysis']
+ATLAS_PROJECTS = ['athena', 'analysisbase', 'athanalysis', 'analysistop']
 DOCKERHUB_REPO = "https://hub.docker.com/v2/repositories/atlas"
 
 
@@ -299,7 +299,7 @@ def build_sandbox(sandboxPath, dockerPath, force=False):
 
 
 # write setup for Singularity sandbox
-def write_sandboxSetup(filename, inputArgs, imageInfo, sandboxPath, runOpt):
+def write_sandboxSetup(filename, inputArgs, imageInfo, sandboxPath, bindOpt):
     imageSize = imageInfo["imageCompressedSize"]
     dockerPath = imageInfo["dockerPath"]
     lastUpdate = imageInfo["lastUpdate"]
@@ -312,20 +312,20 @@ dockerPath=%s
 imageCompressedSize=%s
 imageLastUpdate=%s
 sandboxPath=%s
-runOpt="%s"
+bindOpt="%s"
 releaseSetup1="/release_setup.sh"
 releaseSetup2="/home/atlas/release_setup.sh"
 if [ -e $sandboxPath$releaseSetup1 -o $sandboxPath$releaseSetup2 ]; then
    if [[ $# -eq 1 && "$1" =~ ^[Jj]upyter$ ]]; then
       runCmd="echo Jupyter is not ready yet"
-      # runCmd="singularity exec $runOpt $sandboxPath /bin/bash -c "'"source $releaseSetup; jupyter lab"'
+      # runCmd="singularity exec $bindOpt $sandboxPath /bin/bash -c "'"source $releaseSetup; jupyter lab"'
    else
       if [ -e $releaseSetup1 ]; then
          releaseSetup=$releaseSetup1
       else
          releaseSetup=$releaseSetup2
       fi
-      runCmd="singularity run $runOpt $sandboxPath /bin/bash --init-file $releaseSetup"
+      runCmd="singularity run $bindOpt $sandboxPath /bin/bash --init-file $releaseSetup"
    fi
    echo -e "\\n$runCmd\\n"
    eval $runCmd
@@ -334,12 +334,12 @@ else
    echo "Please rebuild the Singularity sandbox by running the following"
    echo -e "\n\t source %s $imageName"
 fi
-""" % (' '.join(inputArgs), dockerPath, imageSize, lastUpdate, sandboxPath, runOpt, myScript) )
+""" % (' '.join(inputArgs), dockerPath, imageSize, lastUpdate, sandboxPath, bindOpt, myScript) )
     shellFile.close()
 
 
 # create docker/podman container
-def create_container(contCmd, contName, imageInfo, force=False):
+def create_container(contCmd, contName, imageInfo, bindOpt, force=False):
     dockerPath = imageInfo['dockerPath']
     pullCmd = "%s pull %s" % (contCmd, dockerPath)
     retCode = subprocess.call(pullCmd.split())
@@ -363,7 +363,7 @@ def create_container(contCmd, contName, imageInfo, force=False):
           sys.exit(1)
 
     pwd = os.getcwd()
-    createOpt = "-it -v %s:%s -w %s %s" % (pwd, pwd, pwd, jupyterOpt)
+    createOpt = "-it -v %s:%s -w %s %s %s" % (pwd, pwd, pwd, jupyterOpt, bindOpt)
     createCmd = "%s create %s --name %s %s" % \
                 (contCmd, createOpt, contName, dockerPath)
     out = run_shellCmd(createCmd)
@@ -373,7 +373,7 @@ def create_container(contCmd, contName, imageInfo, force=False):
 
 
 # write setup for Docker/Podman container
-def write_dockerSetup(filename, inputArgs, contCmd, contName, imageInfo, override=False):
+def write_dockerSetup(filename, inputArgs, contCmd, contName, imageInfo, bindOpt, override=False):
     imageSize = imageInfo["imageCompressedSize"]
     dockerPath = imageInfo["dockerPath"]
     lastUpdate = imageInfo["lastUpdate"]
@@ -398,10 +398,9 @@ dockerPath=%s
 imageCompressedSize=%s
 imageLastUpdate=%s
 contName=%s
-# releaseSetup1="/release_setup.sh"
+bindOpt="%s"
 releaseSetup="/home/atlas/release_setup.sh"
 jupyterOpt="-p 8888:8888 -e NB_USER=$USER -e HOME=$HOME -v ${HOME}:${HOME}"
-jupyterOpt="$jupyterOpt -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro"
 re_exited="ago[\ ]+Exited"
 re_up="ago[\ ]+Up"
 
@@ -418,7 +417,7 @@ elif [[ "$listOut" =~ $re_up ]]; then
       eval $unpauseCmd >/dev/null
    fi
 else
-   createCmd="$contCmd create -it -v $PWD:$PWD -w $PWD $jupyterOpt --name $contName $dockerPath"
+   createCmd="$contCmd create -it $bindOpt -v $PWD:$PWD -w $PWD $jupyterOpt --name $contName $dockerPath"
    echo -e "\\n$createCmd"
    eval $createCmd >/dev/null
    startCmd="$contCmd start $contName"
@@ -449,7 +448,7 @@ fi
 stopCmd="$contCmd stop $contName"
 echo -e "\\n$stopCmd"
 eval $stopCmd
-""" % (' '.join(inputArgs), contCmd, dockerPath, imageSize, lastUpdate, contName) )
+""" % (' '.join(inputArgs), contCmd, dockerPath, imageSize, lastUpdate, contName, bindOpt) )
     shellFile.close()
 
 
@@ -485,7 +484,7 @@ def cleanLast(filename):
        contCmd = myImageInfo['contCmd']
        if contCmd == 'singularity' or contCmd == 'apptainer':
           sandboxPath = myImageInfo['sandboxPath']
-          print("Removing the last sandbox=", sandboxPath)
+          print("\nRemoving the last sandbox=%s\n" % sandboxPath)
           try:
              rmtree(sandboxPath)
           except:
@@ -493,7 +492,7 @@ def cleanLast(filename):
           os.rename(filename, filename + '.last')
        else:
           contName = myImageInfo['contName']
-          print("Removing the last container=", contName)
+          print("\nRemoving the last container=%s\n" % contName)
           rmCmd = "%s rm -f %s" % (contCmd, contName)
           run_shellCmd(rmCmd, exitOnFailure=False)
           os.rename(filename, filename + '.last')
@@ -519,8 +518,6 @@ def setup(args):
        print("Please install one of the above tool first")
        sys.exit(1)
 
-    cleanLast(args.shellFilename)
-
     contCmd = contCmds[0]
     if args.contCmd is not None:
        if args.contCmd in contCmds:
@@ -531,21 +528,44 @@ def setup(args):
           print("\t",contCmds)
           sys,exit(1)
 
+    cleanLast(args.shellFilename)
+
+    paths = args.volume
+    volumes = []
+    if paths is not None:
+       pwd = os.getcwd()
+       home = os.path.expanduser("~")
+       for path in paths.split(','):
+           if os.path.samefile(pwd, path):
+              continue
+           elif contCmd == "singularity" and os.path.samefile(home, path):
+              continue 
+           volumes += [path]
+
     if contCmd == "singularity":
        if not os.path.exists("singularity"):
           os.mkdir("singularity")
        sandboxPath = "singularity/%s-%s" % (project, release)
        build_sandbox(sandboxPath, dockerPath, args.force)
-       runOpt = ''
-       write_sandboxSetup(args.shellFilename, args.tags, imageInfo, sandboxPath, runOpt)
+       bindOpt = ''
+       for path in volumes:
+           bindOpt += " -B %s" % path
+       write_sandboxSetup(args.shellFilename, args.tags, imageInfo, sandboxPath, bindOpt)
 
     elif contCmd == "podman" or contCmd == "docker":
        testCmd = "%s info" % contCmd
        run_shellCmd(testCmd)
        contName = '_'.join([getpass.getuser(), project, release])
 
-       create_container(contCmd, contName, imageInfo, args.force)
-       write_dockerSetup(args.shellFilename, args.tags, contCmd, contName, imageInfo, args.force)
+       bindOpt = ''
+       for path in volumes:
+           if path.find(':') > 0:
+              bindOpt += " -v %s" % path
+           else:
+              bindOpt += " -v %s:%s" % (path, path)
+
+       create_container(contCmd, contName, imageInfo, bindOpt, args.force)
+       write_dockerSetup(args.shellFilename, args.tags, contCmd, contName, imageInfo, bindOpt, args.force)
 
     sleep(1)
 
@@ -566,7 +586,7 @@ def main():
 
   source %s listReleases AthAnalysis
   source %s listReleases AthAnalysis,"21.2.2*"
-  source %s AnalysisBase:21.2.132
+  source %s AnalysisBase:latest
   source %s            # Empty arg to rerun the already setup container
   source %s setup AnalysisBase,21.2.132""" % ((myScript,)*5)
 
@@ -604,6 +624,7 @@ def main():
                                action="store_const", const="%s" % cmd, 
                                help="Use %s to the container" % cmd)
     sp_setup.add_argument('-f', '--force', action='store_true', default=False, help="Force to override the existing container/sandbox")
+    sp_setup.add_argument('--volume', nargs='?', metavar='path[,srcPath:targePath]', help="Additional path(s) delimited by comma, to be mounted into the container")
     sp_setup.add_argument('tags', nargs='+', metavar='<ReleaseTags>', help='A release to run')
     sp_setup.set_defaults(func=setup)
     set_default_subparser(parser, 'setup', 3)
