@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-10-27-beta01
+# version=2023-10-26-beta02
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -67,36 +67,7 @@ from urllib.request import urlopen, Request
 
 URL_MYSELF = "https://raw.githubusercontent.com/usatlas/ML-Containers/main/run-atlas_container.sh"
 CONTAINER_CMDS = ['podman', 'docker', 'singularity']
-URL_GITLAB = "https://gitlab.cern.ch/api/v4/projects"
-URL_PROJECT_ATLAS = "https://gitlab.cern.ch/api/v4/projects/53790/registry/repositories"
-URL_PROJECT_STAT = "https://gitlab.cern.ch/api/v4/projects/122672/registry/repositories"
-IMAGE_CONFIG = {
-  "analysisbase":{"url_repos":URL_PROJECT_ATLAS,
-                  "pythonVersion":[["21.*", "python27"], ["22.*", "python37"], 
-                                   ["23.*", "python39"], ["24.*", "python39"]
-                   ],
-                 },
-  "athanalysis":{"url_repos":URL_PROJECT_ATLAS,
-                  "pythonVersion":[["21.*", "python27"], ["22.*", "python37"], 
-                                   ["23.*", "python39"], ["24.*", "python39"]
-                   ],
-                 },
-  "analysistop":{"url_repos":URL_PROJECT_ATLAS,
-                  "pythonVersion":[["21.*", "python27"], ["22.*", "python37"], 
-                                   ["23.*", "python39"], ["24.*", "python39"]
-                   ],
-                 },
-  "athsimulation":{"url_repos":URL_PROJECT_ATLAS,
-                  "pythonVersion":[["21.*", "python27"], ["22.*", "python37"], 
-                                   ["23.*", "python39"], ["24.*", "python39"]
-                   ],
-                 },
-  "statanalysis":{"url_repos":URL_PROJECT_STAT,
-                  "pythonVersion":[["0-0-*", "python38"], ["*", "python310"]],
-                },
-}
-ATLAS_PROJECTS = list(IMAGE_CONFIG.keys())
-
+ATLAS_PROJECTS = ['athena', 'analysisbase', 'athanalysis', 'analysistop']
 DOCKERHUB_REPO = "https://hub.docker.com/v2/repositories/atlas"
 
 
@@ -232,49 +203,53 @@ def run_shellCmd(shellCmd, exitOnFailure=True):
 
 
 def listImageTags(project):
-    url_tags = (IMAGE_CONFIG[project])["url_repos"] + "?tags=true"
+    url_tags = DOCKERHUB_REPO + '/' + project + '/tags?page_size=5000'
     response = urlopen(url_tags)
     json_obj = json.loads(response.read().decode('utf-8'))
-    repoID = None
-    json_tags = {}
-    for repo in json_obj:
-        if repo["name"] == project or repo["path"].endswith('/'+project):
-           json_tags = repo["tags"]
-           repoID = repo["id"]
-           break
-    imageTags = []
+    json_tags = json_obj['results']
+    imageTags = {}
+    latest_digest = ''
+    latest_name = ''
+    latest_index = None
     for tagObj in json_tags:
-        imageTags += [tagObj['name']]
+        name = tagObj['name']
+        digest = tagObj['images'][0]['digest']
+        imageSize = tagObj['full_size']
+        lastUpdate = tagObj['tag_last_pushed']
+        imageTags[name] = {'imageCompressedSize':imageSize, 'lastUpdate':lastUpdate, 'releaseName':name}
+        if name == 'latest':
+           latest_digest = digest
+        elif latest_digest != '':
+           if digest == latest_digest:
+              latest_name = name
 
-    return imageTags, repoID
+    if latest_name != '':
+       imageTags['latest']['releaseName'] = latest_name
+
+    return imageTags
            
 
 def listReleases(args):
-    inputTags = args.tags
-    if len(inputTags) == 0:
-       print("Please specify a project name. The available projects are:\n\n", ATLAS_PROJECTS)
-       sys.exit(1)
-
-    releaseTags = parseArgTags(inputTags, requireRelease=False)
+    releaseTags = parseArgTags(args.tags, requireRelease=False)
     project = releaseTags['project']
     if 'release' in releaseTags:
        release = releaseTags['release']
     else:
        release = None
-    imageTags, repoID = listImageTags(project)
+    imageTags = listImageTags(project)
     releasePrint = ""
     if release is None:
-       tags = imageTags
+       tags = list(imageTags.keys())
     else:
        tags = []
        releasePrint = " matching release=%s" % release
-       for tagName in imageTags:
-           if fnmatch.fnmatch(tagName, release):
-              tags += [ tagName ]
+       for tagKey in imageTags.keys():
+           if fnmatch.fnmatch(tagKey, release):
+              tags += [ tagKey ]
     tags.sort(key=Version)
     if len(tags) > 0:
        pp = pprint.PrettyPrinter(indent=4, compact=True)
-       print("Found the following release containers for the project= %s %s\n" % (project, releasePrint))
+       print("Found the following release container list for the project=", project, releasePrint)
        pp.pprint(tags)
     else:
        print("No release container found for the project=", project, releasePrint)
@@ -282,18 +257,14 @@ def listReleases(args):
 
 def getImageInfo(project, release, printOut=True):
     imageInfo = {}
-    imageTags, repoID = listImageTags(project)
-    if not release in imageTags:
-       print("!!Warning!! release=%s is NOT available" % release)
+    imageTags = listImageTags(project)
+    if release in imageTags:
+       imageInfo = imageTags[release].copy()
+       releaseName = imageInfo.pop('releaseName')
+       imageInfo['dockerPath'] = "atlas/%s:%s" % (project, releaseName)
+    else:
+       print("!!Warning!! release%s is NOT available")
        sys.exit(1)
-
-    url_tag = (IMAGE_CONFIG[project])["url_repos"] + "/%s/tags/%s" % (repoID, release)
-    response = urlopen(url_tag)
-    json_obj = json.loads(response.read().decode('utf-8'))
-
-    imageInfo['dockerPath' ] = json_obj['location']
-    imageInfo['imageCompressedSize'] = json_obj['total_size']
-    imageInfo['lastUpdate'] = json_obj['created_at']
 
     if len(imageInfo) > 0 and printOut:
        print("Found an image")
@@ -407,17 +378,17 @@ def write_dockerSetup(filename, inputArgs, contCmd, contName, imageInfo, bindOpt
     dockerPath = imageInfo["dockerPath"]
     lastUpdate = imageInfo["lastUpdate"]
 
-    lsCmd = "%s exec %s ls /release_setup.sh /home/atlas/release_setup.sh 2>/dev/null" % (contCmd, contName)
-    releaseSetup = run_shellCmd(lsCmd, exitOnFailure=False)
-    if len(releaseSetup) == 0:
-       print("!!Error!! No 'release_setup.sh' is found in the image, exit now")
-       sys.exit(1)
-    else:
-       items = releaseSetup.split()
-       if len(items) > 0 and '/release_setup.sh' in items:
-          releaseSetup = '/release_setup.sh'
-       else:
-          releaseSetup = items[0]
+    # lsCmd = "%s exec %s ls /release_setup.sh /home/atlas/release_setup.sh 2>/dev/null" % (contCmd, contName)
+    # releaseSetup = run_shellCmd(lsCmd, exitOnFailure=False)
+    # if len(releaseSetup) == 0:
+    #    print("!!Error!! No 'release_setup.sh' is found in the image, exit now")
+    #    sys.exit(1)
+    # else:
+    #    items = releaseSetup.split()
+    #    if len(items) > 0 and '/release_setup.sh' in items:
+    #       releaseSetup = '/release_setup.sh'
+    #    else:
+    #       releaseSetup = items[0]
 
     shellFile = open(filename, 'w')
     shellFile.write("""
@@ -428,7 +399,7 @@ imageCompressedSize=%s
 imageLastUpdate=%s
 contName=%s
 bindOpt="%s"
-releaseSetup=%s
+releaseSetup="/home/atlas/release_setup.sh"
 jupyterOpt="-p 8888:8888 -e NB_USER=$USER -e HOME=$HOME -v ${HOME}:${HOME}"
 re_exited="ago[\ ]+Exited"
 re_up="ago[\ ]+Up"
@@ -477,8 +448,7 @@ fi
 stopCmd="$contCmd stop $contName"
 echo -e "\\n$stopCmd"
 eval $stopCmd
-""" % (' '.join(inputArgs), contCmd, dockerPath, imageSize, lastUpdate, 
-       contName, bindOpt, releaseSetup) )
+""" % (' '.join(inputArgs), contCmd, dockerPath, imageSize, lastUpdate, contName, bindOpt) )
     shellFile.close()
 
 
@@ -633,7 +603,7 @@ def main():
 
     sp_listReleases = sp.add_parser('listReleases', help='list all available ATLAS releases of a given project')
     # sp_listReleases.add_argument('projectName', metavar='<ProjectName>', help='Project name to list releases')
-    sp_listReleases.add_argument('tags', nargs='*', metavar='<ReleaseTags>', help='Project name to list releases, and release number with wildcard *')
+    sp_listReleases.add_argument('tags', nargs='+', metavar='<ReleaseTags>', help='Project name to list releases, and release number with wildcard *')
     sp_listReleases.set_defaults(func=listReleases)
 
     sp_printImageInfo = sp.add_parser('printImageInfo', help='print the image size and last update date of the given image')
