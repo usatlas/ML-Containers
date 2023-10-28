@@ -67,7 +67,7 @@ from urllib.request import urlopen, Request
 
 URL_MYSELF = "https://raw.githubusercontent.com/usatlas/ML-Containers/main/run-atlas_container.sh"
 CONTAINER_CMDS = ['podman', 'docker', 'singularity']
-ATLAS_PROJECTS = ['athena', 'analysisbase', 'athanalysis', 'analysistop']
+ATLAS_PROJECTS = ['athena', 'analysisbase', 'athanalysis', 'analysistop', 'athsimulation', 'rucio-clients']
 DOCKERHUB_REPO = "https://hub.docker.com/v2/repositories/atlas"
 
 
