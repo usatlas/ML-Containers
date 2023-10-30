@@ -654,7 +654,7 @@ def main():
                                action="store_const", const="%s" % cmd, 
                                help="Use %s to the container" % cmd)
     sp_setup.add_argument('-f', '--force', action='store_true', default=False, help="Force to override the existing container/sandbox")
-    sp_setup.add_argument('--volume', nargs='?', metavar='path[,srcPath:targePath]', help="Additional path(s) delimited by comma, to be mounted into the container")
+    sp_setup.add_argument('-B', '--volume', nargs='?', metavar='path[,srcPath:targePath]', help="Additional path(s) delimited by comma, to be mounted into the container")
     sp_setup.add_argument('tags', nargs='+', metavar='<ReleaseTags>', help='A release to run')
     sp_setup.set_defaults(func=setup)
     set_default_subparser(parser, 'setup', 3)
