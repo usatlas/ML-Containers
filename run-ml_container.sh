@@ -1,6 +1,7 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-10-26-r02
+# version=2023-11-04-r01
+# author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
 ret=0
@@ -48,28 +49,25 @@ fi
 import getpass
 import os
 import sys
+from datetime import datetime
+from time import sleep
 
-pythonMajor = sys.version_info[0]
 import argparse
 import ast
 import json
 import pprint
 import re
 import subprocess
-from time import sleep
 
-if pythonMajor < 3:
-   from distutils.spawn import find_executable as which
-   from urllib import urlopen
-   from requests import Request
-   from commands import getstatusoutput
-else:
-   from shutil import which
-   from subprocess import getstatusoutput
-   from urllib.request import urlopen, Request
+from shutil import which
+from subprocess import getstatusoutput
+from urllib.request import urlopen, Request
 
 
-URL_MYSELF = "https://raw.githubusercontent.com/usatlas/ML-Containers/main/run-ml_container.sh"
+GITHUB_REPO="usatlas/ML-Containers"
+GITHUB_PATH="run-ml_container.sh"
+URL_SELF = "https://raw.githubusercontent.com/%s/main/%s" % (GITHUB_REPO, GITHUB_PATH)
+URL_API_SELF = "https://api.github.com/repos/%s/commits?path=%s&per_page=100" % (GITHUB_REPO, GITHUB_PATH)
 CONTAINER_CMDS = ['podman', 'docker', 'singularity']
 DOCKERHUB_REPO = "https://hub.docker.com/v2/repositories/"
 IMAGE_CENTOS7_PY38 = {
@@ -122,6 +120,16 @@ def set_default_subparser(parser, default_subparser, index_action=1):
             sys.argv.insert(index_action, default_subparser) 
 
 
+def getLastCommit():
+    response = urlopen(URL_API_SELF)
+    json_obj = json.loads(response.read().decode('utf-8'))
+    recentCommit = json_obj[0]['commit']['committer']['date']
+    myScript =  os.path.abspath(sys.argv[0])
+    myMTime = datetime.fromtimestamp(os.path.getmtime(myScript))
+    myDate = myMTime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return myDate, recentCommit
+
+
 def getVersion(myFile=None):
     isFileOpen = False
     if myFile is None:
@@ -133,7 +141,7 @@ def getVersion(myFile=None):
           myFile = myFile.split('\n')
 
     no = 0
-    version = None
+    version = ""
     for line in myFile:
         no += 1
         if no > 10:
@@ -150,26 +158,27 @@ def getVersion(myFile=None):
 
 def selfUpdate(args):
     currentVersion = getVersion()
+    myDate, recentCommit = getLastCommit()
+    print("The most recent GitHub commit's UTC timestamp is", recentCommit)
 
-    resource = urlopen(URL_MYSELF)
+    resource = urlopen(URL_SELF)
     content = resource.read().decode('utf-8')
     latestVersion = getVersion(content)
-    if latestVersion is not None:
-       if currentVersion is None or latestVersion > currentVersion:
-          print("Update available, updating the script itself")
-          myScript =  os.path.abspath(sys.argv[0])
-          os.rename(myScript, myScript + '.old')
-          try:
-             myfile = open(myScript, 'w')
-             myfile.write(content)
-             myfile.close()
-             print("Update finished")
-          except Exception:
-             err = sys.exc_info()[1]
-             print("Failed to write out the latest version of this script\n", err)
-             print("Keep the current version")
-             os.rename(myScript + '.old', myScript) 
-          return
+    if latestVersion > currentVersion or (latestVersion == currentVersion and recentCommit > myDate):
+       print("Update available, updating the script itself")
+       myScript =  os.path.abspath(sys.argv[0])
+       os.rename(myScript, myScript + '.old')
+       try:
+           myfile = open(myScript, 'w')
+           myfile.write(content)
+           myfile.close()
+           print("Update finished")
+       except Exception:
+           err = sys.exc_info()[1]
+           print("Failed to write out the latest version of this script\n", err)
+           print("Keep the current version")
+           os.rename(myScript + '.old', myScript) 
+       return
 
     print("Already up-to-date, no update needed")
 
