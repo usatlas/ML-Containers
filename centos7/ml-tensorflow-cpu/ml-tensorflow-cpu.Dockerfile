@@ -52,7 +52,7 @@ RUN micromamba install -y jupyterlab jupyterhub click pyrsistent rich \
     && sed -i -e '1r/tmp/shellWrapper-for-python3-I.sh' -e '0,/coding:/d' jupyter* \
     && sed -i -e '1r/tmp/shellWrapper-for-python3-nohome.sh' -e '0,/coding:/d' ipython \
     && ln -s ipython ipython-nohome \
-    && rm -f /tmp/shellWrapper-for-python3-I.sh hellWrapper-for-python3-nohome.sh \
+    && rm -f /tmp/shellWrapper-for-python3-I.sh /tmp/shellWrapper-for-python3-nohome.sh \
     && sed -i "1,3 s%${PWD}/python%/usr/bin/env python%" \
        $(file * | grep "script" | cut -d: -f1) \
     && cd $prefix/share/jupyter/kernels \

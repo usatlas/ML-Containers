@@ -13,6 +13,7 @@ ln -s $CondaRoot baseEnv_dir
 
 echo -e "conda-meta\nbin\nsbin" > $listFilename
 find $CondaRoot/etc -type d | sed "s#$CondaRoot/##" >> $listFilename
+find $CondaRoot/ssl -type d | sed "s#$CondaRoot/##" >> $listFilename
 find $CondaRoot/share/jupyter -type d | sed "s#$CondaRoot/##" >> $listFilename
 find $CondaRoot/x86_64-conda-linux-gnu | sed "s#$CondaRoot/##" >> $listFilename
 find $CondaRoot/lib -type d | grep -v "site-packages" | sed "s#$CondaRoot/##" >> $listFilename

@@ -29,6 +29,9 @@ micromamba activate
 
 unset PYTHONHOME
 
+# SSL CAFile location
+export SSL_CERT_FILE=$CONDA_PREFIX/ssl/cert.pem
+
 if [ "${CondaDir}" != "" ]; then
    export EnvTopDir=$myDir
    echo -e '\nTo create your own new env, run "source $EnvTopDir/create-newEnv-on-base.sh -h" for help'
