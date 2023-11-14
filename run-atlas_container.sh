@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-11-04-r01
+# version=2023-11-14-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -154,8 +154,8 @@ def getLastCommit():
     json_obj = json.loads(response.read().decode('utf-8'))
     recentCommit = json_obj[0]['commit']['committer']['date']
     myScript =  os.path.abspath(sys.argv[0])
-    myMTime = datetime.fromtimestamp(os.path.getmtime(myScript))
-    myDate = myMTime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    myMTime = datetime.utcfromtimestamp(os.path.getmtime(myScript))
+    myDate = myMTime.strftime('%Y-%m-%dT%H:%M:%SZ')
     return myDate, recentCommit
 
 
