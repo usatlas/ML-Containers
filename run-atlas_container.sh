@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-11-14-r01
+# version=2023-12-06-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -644,22 +644,23 @@ def main():
     parser.add_argument('--version', action='store_true', help="print out the script version")
     sp = parser.add_subparsers(dest='command', help='Default=setup')
 
-    sp_listReleases = sp.add_parser('listReleases', help='list all available ATLAS releases of a given project')
+    sp_listReleases = sp.add_parser('listReleases', help='list container releases', description='list all available ATLAS releases of a given project')
     # sp_listReleases.add_argument('projectName', metavar='<ProjectName>', help='Project name to list releases')
     sp_listReleases.add_argument('tags', nargs='*', metavar='<ReleaseTags>', help='Project name to list releases, and release number with wildcard *')
     sp_listReleases.set_defaults(func=listReleases)
 
-    sp_printImageInfo = sp.add_parser('printImageInfo', help='print the image size and last update date of the given image')
+    sp_printImageInfo = sp.add_parser('printImageInfo', help='print Info of a container release', description='print the image size and last update date of the given image')
     sp_printImageInfo.add_argument('tags', nargs='+', metavar='<ReleaseTags>')
     sp_printImageInfo.set_defaults(func=printImageInfo)
 
-    sp_printMe = sp.add_parser('printMe', help='print the container/sandbox set up for the work directory')
+    sp_printMe = sp.add_parser('printMe', help='print info of the setup container', description='print the container/sandbox set up for the work directory')
     sp_printMe.set_defaults(func=printMe)
 
-    sp_update = sp.add_parser('selfUpdate', help='update the script itself')
+    desc = 'update the script itself'
+    sp_update = sp.add_parser('selfUpdate', help=desc, description=desc)
     sp_update.set_defaults(func=selfUpdate)
 
-    sp_setup = sp.add_parser('setup', help='create a container/sandbox for the given image', 
+    sp_setup = sp.add_parser('setup', help='set up a container release', description='create a container/sandbox for the given image', 
                     epilog=example_setup, formatter_class=argparse.RawDescriptionHelpFormatter)
     group_cmd = sp_setup.add_mutually_exclusive_group()
     for cmd in CONTAINER_CMDS:
@@ -672,8 +673,8 @@ def main():
     sp_setup.set_defaults(func=setup)
     set_default_subparser(parser, 'setup', 3)
 
-    sp_update = sp.add_parser('jupyter', help='(not ready yet)run JupyterLab on the already created container/sandbox')
-    sp_update.set_defaults(func=jupyter)
+    sp_jupyter = sp.add_parser('jupyter', help='(not ready) run Jupyter with the container', description='(not ready yet)run JupyterLab on the already created container/sandbox')
+    sp_jupyter.set_defaults(func=jupyter)
 
     args, extra = parser.parse_known_args()
 

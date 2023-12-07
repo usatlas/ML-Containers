@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-11-14-r01
+# version=2023-12-07-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -13,7 +13,7 @@ else
    case ${0##*/} in bash|-bash|zsh|-zsh) sourced=1; esac
 fi
 
-mySetup=runMe-here.sh
+mySetup=runML-here.sh
 
 if [[ -e $mySetup && ( $# -eq 0 || "$@" =~ "--rerun" ) ]]; then
    source $mySetup
@@ -582,6 +582,7 @@ def setup(args):
        print("Please specify the full name of the following images:")
        pp = pprint.PrettyPrinter(indent=4)
        pp.pprint(images)
+       sys.exit(1)
     imageFullName = images[0]
 
     (imageName, tagName) = imageFullName.split(':')
@@ -787,14 +788,14 @@ def main():
     example_global = """Examples:
 
   source %s listImages
-  source %s ml-base
+  source %s ml-base:centos7-python39
   source %s            # Empty arg to rerun the already setup container
-  source %s setup ml-base""" % (myScript, myScript, myScript, myScript)
+  source %s setup ml-base:centos7-python39""" % (myScript, myScript, myScript, myScript)
 
     example_setup = """Examples:
 
-  source %s ml-base
-  source %s --sing ml-base""" % (myScript, myScript)
+  source %s ml-base:centos7-python39
+  source %s --sing ml-base:centos7-python39""" % (myScript, myScript)
 
     parser = argparse.ArgumentParser(epilog=example_global, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--shellFilename', action='store', help=argparse.SUPPRESS)
@@ -802,28 +803,31 @@ def main():
     parser.add_argument('--version', action='store_true', help="print out the script version")
     sp = parser.add_subparsers(dest='command', help='Default=setup')
 
-    sp_listImages = sp.add_parser('listImages', help='list all available ML images')
+    desc = 'list all available ML images'
+    sp_listImages = sp.add_parser('listImages', help=desc, description=desc)
     sp_listImages.set_defaults(func=listImages)
 
-    sp_listPackages = sp.add_parser('listPackages', help='list packages in the given image')
+    desc = 'list packages in the given image'
+    sp_listPackages = sp.add_parser('listPackages', help=desc, description=desc)
     sp_listPackages.add_argument('name', metavar='<ImageName>', help='Image name to list packages')
     sp_listPackages.set_defaults(func=listPackages)
 
-    sp_getImageInfo = sp.add_parser('getImageInfo', help='get image size. last update date and SHA256 hash of the given image')
-    sp_getImageInfo.add_argument('name', metavar='<ImageName>')
-    sp_getImageInfo.set_defaults(func=getImageInfo)
+    sp_printImageInfo = sp.add_parser('printImageInfo', help='print Image Info', description='print out image size. last update date and SHA256 hash of the given image')
+    sp_printImageInfo.add_argument('name', metavar='<ImageName>')
+    sp_printImageInfo.set_defaults(func=getImageInfo)
 
-    sp_printMe = sp.add_parser('printMe', help='print the container/sandbox set up for the work directory')
+    sp_printMe = sp.add_parser('printMe', help='print info of the setup container', description='print the container/sandbox set up for the work directory')
     sp_printMe.set_defaults(func=printMe)
 
-    sp_update = sp.add_parser('update', help='check if the container/sandbox here is up-to-date, update it needed and -f applied')
+    sp_update = sp.add_parser('update', help='update the container image', description='check if the container/sandbox here is up-to-date, update it needed and -f applied')
     sp_update.add_argument('-f', '--force', action='store_true', default=False, help="Force to override the existing container/sandbox")
     sp_update.set_defaults(func=update)
 
-    sp_update = sp.add_parser('selfUpdate', help='update the script itself')
+    desc = 'update the script itself'
+    sp_update = sp.add_parser('selfUpdate', help=desc, description=desc)
     sp_update.set_defaults(func=selfUpdate)
 
-    sp_setup = sp.add_parser('setup', help='create a container/sandbox for the given image', 
+    sp_setup = sp.add_parser('setup', help='set up container', description='create a container/sandbox for the given image', 
                     epilog=example_setup, formatter_class=argparse.RawDescriptionHelpFormatter)
     group_cmd = sp_setup.add_mutually_exclusive_group()
     for cmd in CONTAINER_CMDS:
@@ -836,8 +840,8 @@ def main():
     sp_setup.set_defaults(func=setup)
     set_default_subparser(parser, 'setup', 3)
 
-    sp_update = sp.add_parser('jupyter', help='run JupyterLab on the already created container/sandbox')
-    sp_update.set_defaults(func=jupyter)
+    sp_jupyter = sp.add_parser('jupyter', help='run Jupyter with the container', description='run JupyterLab on the already created container/sandbox')
+    sp_jupyter.set_defaults(func=jupyter)
 
     args, extra = parser.parse_known_args()
 

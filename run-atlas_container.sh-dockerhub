@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-10-26-beta02
+# version=2023-12-07-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -230,7 +230,12 @@ def listImageTags(project):
            
 
 def listReleases(args):
-    releaseTags = parseArgTags(args.tags, requireRelease=False)
+    inputTags = args.tags
+    if len(inputTags) == 0:
+       print("Please specify a project name. The available projects are:\n\n", ATLAS_PROJECTS)
+       sys.exit(1)
+
+    releaseTags = parseArgTags(inputTags, requireRelease=False)
     project = releaseTags['project']
     if 'release' in releaseTags:
        release = releaseTags['release']
@@ -243,13 +248,13 @@ def listReleases(args):
     else:
        tags = []
        releasePrint = " matching release=%s" % release
-       for tagKey in imageTags.keys():
-           if fnmatch.fnmatch(tagKey, release):
-              tags += [ tagKey ]
+       for tagName in imageTags:
+           if fnmatch.fnmatch(tagName, release):
+              tags += [ tagName ]
     tags.sort(key=Version)
     if len(tags) > 0:
        pp = pprint.PrettyPrinter(indent=4, compact=True)
-       print("Found the following release container list for the project=", project, releasePrint)
+       print("Found the following release containers for the project= %s %s\n" % (project, releasePrint))
        pp.pprint(tags)
     else:
        print("No release container found for the project=", project, releasePrint)
@@ -261,7 +266,7 @@ def getImageInfo(project, release, printOut=True):
     if release in imageTags:
        imageInfo = imageTags[release].copy()
        releaseName = imageInfo.pop('releaseName')
-       imageInfo['dockerPath'] = "atlas/%s:%s" % (project, releaseName)
+       imageInfo['dockerPath'] = "docker.io/atlas/%s:%s" % (project, releaseName)
     else:
        print("!!Warning!! release%s is NOT available")
        sys.exit(1)
@@ -378,17 +383,17 @@ def write_dockerSetup(filename, inputArgs, contCmd, contName, imageInfo, bindOpt
     dockerPath = imageInfo["dockerPath"]
     lastUpdate = imageInfo["lastUpdate"]
 
-    # lsCmd = "%s exec %s ls /release_setup.sh /home/atlas/release_setup.sh 2>/dev/null" % (contCmd, contName)
-    # releaseSetup = run_shellCmd(lsCmd, exitOnFailure=False)
-    # if len(releaseSetup) == 0:
-    #    print("!!Error!! No 'release_setup.sh' is found in the image, exit now")
-    #    sys.exit(1)
-    # else:
-    #    items = releaseSetup.split()
-    #    if len(items) > 0 and '/release_setup.sh' in items:
-    #       releaseSetup = '/release_setup.sh'
-    #    else:
-    #       releaseSetup = items[0]
+    lsCmd = "%s exec %s ls /release_setup.sh /home/atlas/release_setup.sh 2>/dev/null" % (contCmd, contName)
+    releaseSetup = run_shellCmd(lsCmd, exitOnFailure=False)
+    if len(releaseSetup) == 0:
+       print("!!Error!! No 'release_setup.sh' is found in the image, exit now")
+       sys.exit(1)
+    else:
+       items = releaseSetup.split()
+       if len(items) > 0 and '/release_setup.sh' in items:
+          releaseSetup = '/release_setup.sh'
+       else:
+          releaseSetup = items[0]
 
     shellFile = open(filename, 'w')
     shellFile.write("""
@@ -399,7 +404,7 @@ imageCompressedSize=%s
 imageLastUpdate=%s
 contName=%s
 bindOpt="%s"
-releaseSetup="/home/atlas/release_setup.sh"
+releaseSetup=%s
 jupyterOpt="-p 8888:8888 -e NB_USER=$USER -e HOME=$HOME -v ${HOME}:${HOME}"
 re_exited="ago[\ ]+Exited"
 re_up="ago[\ ]+Up"
@@ -448,7 +453,8 @@ fi
 stopCmd="$contCmd stop $contName"
 echo -e "\\n$stopCmd"
 eval $stopCmd
-""" % (' '.join(inputArgs), contCmd, dockerPath, imageSize, lastUpdate, contName, bindOpt) )
+""" % (' '.join(inputArgs), contCmd, dockerPath, imageSize, lastUpdate, 
+       contName, bindOpt, releaseSetup) )
     shellFile.close()
 
 
@@ -601,22 +607,23 @@ def main():
     parser.add_argument('--version', action='store_true', help="print out the script version")
     sp = parser.add_subparsers(dest='command', help='Default=setup')
 
-    sp_listReleases = sp.add_parser('listReleases', help='list all available ATLAS releases of a given project')
+    sp_listReleases = sp.add_parser('listReleases', help='list container releases', description='list all available ATLAS releases of a given project')
     # sp_listReleases.add_argument('projectName', metavar='<ProjectName>', help='Project name to list releases')
-    sp_listReleases.add_argument('tags', nargs='+', metavar='<ReleaseTags>', help='Project name to list releases, and release number with wildcard *')
+    sp_listReleases.add_argument('tags', nargs='*', metavar='<ReleaseTags>', help='Project name to list releases, and release number with wildcard *')
     sp_listReleases.set_defaults(func=listReleases)
 
-    sp_printImageInfo = sp.add_parser('printImageInfo', help='print the image size and last update date of the given image')
+    sp_printImageInfo = sp.add_parser('printImageInfo', help='print Info of a container release', description='print the image size and last update date of the given image')
     sp_printImageInfo.add_argument('tags', nargs='+', metavar='<ReleaseTags>')
     sp_printImageInfo.set_defaults(func=printImageInfo)
 
-    sp_printMe = sp.add_parser('printMe', help='print the container/sandbox set up for the work directory')
+    sp_printMe = sp.add_parser('printMe', help='print info of the setup container', description='print the container/sandbox set up for the work directory')
     sp_printMe.set_defaults(func=printMe)
 
-    sp_update = sp.add_parser('selfUpdate', help='update the script itself')
+    desc = 'update the script itself'
+    sp_update = sp.add_parser('selfUpdate', help=desc, description=desc)
     sp_update.set_defaults(func=selfUpdate)
 
-    sp_setup = sp.add_parser('setup', help='create a container/sandbox for the given image', 
+    sp_setup = sp.add_parser('setup', help='set up a container release', description='create a container/sandbox for the given image', 
                     epilog=example_setup, formatter_class=argparse.RawDescriptionHelpFormatter)
     group_cmd = sp_setup.add_mutually_exclusive_group()
     for cmd in CONTAINER_CMDS:
@@ -624,13 +631,13 @@ def main():
                                action="store_const", const="%s" % cmd, 
                                help="Use %s to the container" % cmd)
     sp_setup.add_argument('-f', '--force', action='store_true', default=False, help="Force to override the existing container/sandbox")
-    sp_setup.add_argument('--volume', nargs='?', metavar='path[,srcPath:targePath]', help="Additional path(s) delimited by comma, to be mounted into the container")
+    sp_setup.add_argument('-B', '--volume', nargs='?', metavar='path[,srcPath:targePath]', help="Additional path(s) delimited by comma, to be mounted into the container")
     sp_setup.add_argument('tags', nargs='+', metavar='<ReleaseTags>', help='A release to run')
     sp_setup.set_defaults(func=setup)
     set_default_subparser(parser, 'setup', 3)
 
-    sp_update = sp.add_parser('jupyter', help='(not ready yet)run JupyterLab on the already created container/sandbox')
-    sp_update.set_defaults(func=jupyter)
+    sp_jupyter = sp.add_parser('jupyter', help='(not ready) run Jupyter with the container', description='(not ready yet)run JupyterLab on the already created container/sandbox')
+    sp_jupyter.set_defaults(func=jupyter)
 
     args, extra = parser.parse_known_args()
 
