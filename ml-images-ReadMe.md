@@ -403,44 +403,50 @@ Just run **"source run-ml_container.sh -h"** or **"./run-ml-container.sh -h"** (
 <details>
 <summary>run-ml_container.sh -h</summary>
 <blockquote><pre>
-usage: run-ml_container.sh [-h] [--rerun]
-                            {listImages,listPackages,getImageInfo,printMe,update,setup} ...
+usage: run-ml_container.sh [-h] [--rerun] [--version]
+                           {listImages,listPackages,printImageInfo,printMe,update,selfUpdate,setup,jupyter}   
+                           ...
 
 positional arguments:
-  {listImages,listPackages,getImageInfo,printMe,update,setup}
+  {listImages,listPackages,printImageInfo,printMe,update,selfUpdate,setup,jupyter}
                         Default=setup
     listImages          list all available ML images
     listPackages        list packages in the given image
-    getImageInfo        get image size. last update date and SHA256 hash of the given image
-    printMe             print the container/sandbox set up for the work directory
-    update              check if the container/sandbox here is up-to-date,
-                        update it needed and the option -f applied
-    setup               create a container/sandbox for the given image
+    printImageInfo      print Image Info
+    printMe             print info of the setup container
+    update              update the container image
+    selfUpdate          update the script itself
+    setup               set up container
+    jupyter             run Jupyter with the container
 
 optional arguments:
   -h, --help            show this help message and exit
   --rerun               rerun the already setup container
+  --version             print out the script version
 
 Examples:
 
   source run-ml_container.sh listImages
-  source run-ml_container.sh ml-base
+  source run-ml_container.sh ml-base:centos7-python39
   source run-ml_container.sh            # Empty arg to rerun the already setup container
-  source run-ml_container.sh setup ml-base
-
+  source run-ml_container.sh setup ml-base:centos7-python39
 </pre></blockquote>
 </details>
 
 There are a few commands in this script:
 
-- **listImages**:       list all available ML image names together with their tag.
-- **listPackages** :  list packages in the given image.
-- **getImageInfo**:   get the size. last update date and SHA256 hash of a ML image.
-- **setup**: create a container/sandbox for the given image
+- **listImages**:      list all available ML image names together with their tag.
+- **listPackages** :   list packages in the given image.
+- **printImageInfo**:  print the size. last update date and SHA256 hash of a ML image.
 - **printMe**: print the container/sandbox previously set up for the work directory
+- **setup**: create a container/sandbox for the given image
 - **update**: check if the container/sandbox here is up-to-date and update it needed.
+- **selfUpdate**: update the script itself
+- **jupyter**: run Jupyter with the container
 
-Among them. the main command is "**setup**".
+Among them. the main and default command is "**setup**".
+
+You can **update the script iself** by running the command **selfUpdate**.
 
 ### Listing Packages in ML Images
 
@@ -1004,3 +1010,23 @@ The image/container used in the current work directory:
     'imageName': 'ml-base:centos7-python38',
     'sandboxPath': 'singularity/ml-base:centos7-python38'}
 ```
+### Run Jupyter Locally with the Setup ML Container
+
+After having set up a ML container, you can start up a Jupyter lab with the set up ML image.
+
+```shell
+$ ./run-ml_container.sh jupyter
+
+docker exec -it -u 1000:1000 -e USER=yesw2000 yesw2000_ml-base_centos7-python39 jupyter lab --ip 0.0.0.0      
+
+[...]
+[C 2023-12-07 19:35:35.901 ServerApp]
+
+    To access the server, open this file in a browser:
+        file:///home/yesw2000/.local/share/jupyter/runtime/jpserver-49-open.html
+    Or copy and paste one of these URLs:
+        http://7140f84ebda5:8888/lab?token=1530678993878f9b3736671933a6dce2741163b1afe30f63
+        http://127.0.0.1:8888/lab?token=1530678993878f9b3736671933a6dce2741163b1afe30f63
+[...]
+```
+Then just follow the printed instruction, open the URL on your local browser.
