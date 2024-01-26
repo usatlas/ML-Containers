@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-12-07-r01
+# version=2024-01-26-r02
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -49,15 +49,15 @@ fi
 import getpass
 import os
 import sys
+from datetime import datetime
+from time import sleep
 
-pythonMajor = sys.version_info[0]
 import argparse
 import ast
 import json
 import pprint
 import re
 import subprocess
-from time import sleep
 import fnmatch
 
 from shutil import which, rmtree
@@ -65,7 +65,7 @@ from subprocess import getstatusoutput
 from urllib.request import urlopen, Request
 
 
-URL_MYSELF = "https://raw.githubusercontent.com/usatlas/ML-Containers/main/run-atlas_container.sh"
+URL_SELF = "https://raw.githubusercontent.com/usatlas/ML-Containers/main/run-atlas_container.sh"
 CONTAINER_CMDS = ['podman', 'docker', 'singularity']
 ATLAS_PROJECTS = ['athena', 'analysisbase', 'athanalysis', 'analysistop', 'athsimulation', 'rucio-clients']
 DOCKERHUB_REPO = "https://hub.docker.com/v2/repositories/atlas"
@@ -118,6 +118,16 @@ def set_default_subparser(parser, default_subparser, index_action=1):
             sys.argv.insert(index_action, default_subparser) 
 
 
+def getLastCommit():
+    response = urlopen(URL_API_SELF)
+    json_obj = json.loads(response.read().decode('utf-8'))
+    recentCommit = json_obj[0]['commit']['committer']['date']
+    myScript =  os.path.abspath(sys.argv[0])
+    myMTime = datetime.utcfromtimestamp(os.path.getmtime(myScript))
+    myDate = myMTime.strftime('%Y-%m-%dT%H:%M:%SZ')
+    return myDate, recentCommit
+
+
 def getVersion(myFile=None):
     isFileOpen = False
     if myFile is None:
@@ -129,7 +139,7 @@ def getVersion(myFile=None):
           myFile = myFile.split('\n')
 
     no = 0
-    version = None
+    version = ""
     for line in myFile:
         no += 1
         if no > 10:
@@ -169,26 +179,27 @@ def parseArgTags(inputArgs, requireRelease=False):
     
 def selfUpdate(args):
     currentVersion = getVersion()
+    myDate, recentCommit = getLastCommit()
+    print("The most recent GitHub commit's UTC timestamp is", recentCommit)
 
-    resource = urlopen(URL_MYSELF)
+    resource = urlopen(URL_SELF)
     content = resource.read().decode('utf-8')
     latestVersion = getVersion(content)
-    if latestVersion is not None:
-       if currentVersion is None or latestVersion > currentVersion:
-          print("Update available, updating the script itself")
-          myScript =  os.path.abspath(sys.argv[0])
-          os.rename(myScript, myScript + '.old')
-          try:
-             myfile = open(myScript, 'w')
-             myfile.write(content)
-             myfile.close()
-             print("Update finished")
-          except Exception:
-             err = sys.exc_info()[1]
-             print("Failed to write out the latest version of this script\n", err)
-             print("Keep the current version")
-             os.rename(myScript + '.old', myScript) 
-          return
+    if latestVersion > currentVersion or (latestVersion == currentVersion and recentCommit > myDate):
+       print("Update available, updating the script itself")
+       myScript =  os.path.abspath(sys.argv[0])
+       os.rename(myScript, myScript + '.old')
+       try:
+           myfile = open(myScript, 'w')
+           myfile.write(content)
+           myfile.close()
+           print("Update finished")
+       except Exception:
+           err = sys.exc_info()[1]
+           print("Failed to write out the latest version of this script\n", err)
+           print("Keep the current version")
+           os.rename(myScript + '.old', myScript) 
+       return
 
     print("Already up-to-date, no update needed")
 
@@ -268,7 +279,7 @@ def getImageInfo(project, release, printOut=True):
        releaseName = imageInfo.pop('releaseName')
        imageInfo['dockerPath'] = "docker.io/atlas/%s:%s" % (project, releaseName)
     else:
-       print("!!Warning!! release%s is NOT available")
+       print("!!Warning!! release=%s is NOT available" % release)
        sys.exit(1)
 
     if len(imageInfo) > 0 and printOut:
@@ -325,7 +336,7 @@ if [ -e $sandboxPath$releaseSetup1 -o $sandboxPath$releaseSetup2 ]; then
       runCmd="echo Jupyter is not ready yet"
       # runCmd="singularity exec $bindOpt $sandboxPath /bin/bash -c "'"source $releaseSetup; jupyter lab"'
    else
-      if [ -e $releaseSetup1 ]; then
+      if [ -e $sandboxPath$releaseSetup1 ]; then
          releaseSetup=$releaseSetup1
       else
          releaseSetup=$releaseSetup2
@@ -383,17 +394,17 @@ def write_dockerSetup(filename, inputArgs, contCmd, contName, imageInfo, bindOpt
     dockerPath = imageInfo["dockerPath"]
     lastUpdate = imageInfo["lastUpdate"]
 
-    lsCmd = "%s exec %s ls /release_setup.sh /home/atlas/release_setup.sh 2>/dev/null" % (contCmd, contName)
-    releaseSetup = run_shellCmd(lsCmd, exitOnFailure=False)
-    if len(releaseSetup) == 0:
+    wcCmd = "%s exec %s wc -l /release_setup.sh /home/atlas/release_setup.sh 2>/dev/null" % (contCmd, contName)
+    releaseSetup = run_shellCmd(wcCmd, exitOnFailure=False)
+    if len(releaseSetup.split('\n')) == 1:
        print("!!Error!! No 'release_setup.sh' is found in the image, exit now")
        sys.exit(1)
     else:
        items = releaseSetup.split()
-       if len(items) > 0 and '/release_setup.sh' in items:
+       if '/release_setup.sh' in items:
           releaseSetup = '/release_setup.sh'
        else:
-          releaseSetup = items[0]
+          releaseSetup = '/home/atlas/release_setup.sh'
 
     shellFile = open(filename, 'w')
     shellFile.write("""
@@ -468,12 +479,26 @@ def getMyImageInfo(filename):
     return myImageInfo
 
 
+def isLastRelease(filename, project, release, contCmd):
+    if not os.path.exists(filename):
+       return False
+    myImageInfo = getMyImageInfo(filename)
+    dockerPath = myImageInfo["dockerPath"]
+    if dockerPath.endswith("/%s:%s" % (project, release)):
+      if contCmd is None or contCmd == myImageInfo["contCmd"]:
+         print("The release was previously used in the current directory.\n\t Reuse it now")
+         sleep(1)
+         os.utime(filename, None)
+         return True
+
+    return False
+
+
 def printMe(args):
     if not os.path.exists(args.shellFilename):
        print("No previous container/sandbox setup is found")
        return None
     myImageInfo = getMyImageInfo(args.shellFilename)
-    contCmd = myImageInfo["contCmd"]
     if "runOpt" in myImageInfo:
        myImageInfo.pop("runOpt")
     pp = pprint.PrettyPrinter(indent=4)
@@ -508,6 +533,11 @@ def setup(args):
     releaseTags = parseArgTags(args.tags, requireRelease=True)
     project = releaseTags['project']
     release = releaseTags['release']
+
+    if not args.force:
+       if isLastRelease(args.shellFilename, project, release, args.contCmd):
+          return True
+
     imageInfo = getImageInfo(project, release)
     # print("Found the release=%s:%s" %(project, release),"\n\t with the dockerPath=",dockerPath, "; image compressed size=",imageSize)
     # sys.exit(0)

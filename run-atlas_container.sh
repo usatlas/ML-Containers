@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-01-26-r01
+# version=2024-01-26-r02
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -68,7 +68,7 @@ GITHUB_REPO="usatlas/ML-Containers"
 GITHUB_PATH="run-atlas_container.sh"
 URL_SELF = "https://raw.githubusercontent.com/%s/main/%s" % (GITHUB_REPO, GITHUB_PATH)
 URL_API_SELF = "https://api.github.com/repos/%s/commits?path=%s&per_page=100" % (GITHUB_REPO, GITHUB_PATH)
-CONTAINER_CMDS = ['podman', 'docker', 'singularity']
+CONTAINER_CMDS = ['docker', 'podman', 'singularity']
 URL_GITLAB = "https://gitlab.cern.ch/api/v4/projects"
 URL_PROJECT_ATLAS = "https://gitlab.cern.ch/api/v4/projects/53790/registry/repositories"
 URL_PROJECT_STAT = "https://gitlab.cern.ch/api/v4/projects/122672/registry/repositories"
@@ -406,6 +406,8 @@ def create_container(contCmd, contName, imageInfo, bindOpt, force=False):
 
     pwd = os.getcwd()
     createOpt = "-it -v %s:%s -w %s %s %s" % (pwd, pwd, pwd, jupyterOpt, bindOpt)
+    # if contCmd == 'podman':
+    #    createOpt += ' --privileged'
     createCmd = "%s create %s --name %s %s" % \
                 (contCmd, createOpt, contName, dockerPath)
     out = run_shellCmd(createCmd)
@@ -420,17 +422,17 @@ def write_dockerSetup(filename, inputArgs, contCmd, contName, imageInfo, bindOpt
     dockerPath = imageInfo["dockerPath"]
     lastUpdate = imageInfo["lastUpdate"]
 
-    lsCmd = "%s exec %s ls /release_setup.sh /home/atlas/release_setup.sh 2>/dev/null" % (contCmd, contName)
-    releaseSetup = run_shellCmd(lsCmd, exitOnFailure=False)
-    if len(releaseSetup) == 0:
+    wcCmd = "%s exec %s wc -l /release_setup.sh /home/atlas/release_setup.sh 2>/dev/null" % (contCmd, contName)
+    releaseSetup = run_shellCmd(wcCmd, exitOnFailure=False)
+    if len(releaseSetup.split('\n')) == 1:
        print("!!Error!! No 'release_setup.sh' is found in the image, exit now")
        sys.exit(1)
     else:
        items = releaseSetup.split()
-       if len(items) > 0 and '/release_setup.sh' in items:
+       if '/release_setup.sh' in items:
           releaseSetup = '/release_setup.sh'
        else:
-          releaseSetup = items[0]
+          releaseSetup = '/home/atlas/release_setup.sh'
 
     shellFile = open(filename, 'w')
     shellFile.write("""
@@ -505,12 +507,26 @@ def getMyImageInfo(filename):
     return myImageInfo
 
 
+def isLastRelease(filename, project, release, contCmd):
+    if not os.path.exists(filename):
+       return False
+    myImageInfo = getMyImageInfo(filename)
+    dockerPath = myImageInfo["dockerPath"]
+    if dockerPath.endswith("/%s:%s" % (project, release)):
+      if contCmd is None or contCmd == myImageInfo["contCmd"]:
+         print("The release was previously used in the current directory.\n\t Reuse it now")
+         sleep(1)
+         os.utime(filename, None)
+         return True
+
+    return False
+
+
 def printMe(args):
     if not os.path.exists(args.shellFilename):
        print("No previous container/sandbox setup is found")
        return None
     myImageInfo = getMyImageInfo(args.shellFilename)
-    contCmd = myImageInfo["contCmd"]
     if "runOpt" in myImageInfo:
        myImageInfo.pop("runOpt")
     pp = pprint.PrettyPrinter(indent=4)
@@ -545,11 +561,17 @@ def setup(args):
     releaseTags = parseArgTags(args.tags, requireRelease=True)
     project = releaseTags['project']
     release = releaseTags['release']
+
+    if not args.force:
+       if isLastRelease(args.shellFilename, project, release, args.contCmd):
+          return True
+
     imageInfo = getImageInfo(project, release)
     # print("Found the release=%s:%s" %(project, release),"\n\t with the dockerPath=",dockerPath, "; image compressed size=",imageSize)
     # sys.exit(0)
 
     dockerPath = imageInfo["dockerPath"]
+
     contCmds = []
     for cmd in CONTAINER_CMDS:
         cmdFound = which(cmd)
