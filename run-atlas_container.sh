@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-12-06-r01
+# version=2024-01-26-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -362,7 +362,7 @@ if [ -e $sandboxPath$releaseSetup1 -o $sandboxPath$releaseSetup2 ]; then
       runCmd="echo Jupyter is not ready yet"
       # runCmd="singularity exec $bindOpt $sandboxPath /bin/bash -c "'"source $releaseSetup; jupyter lab"'
    else
-      if [ -e $releaseSetup1 ]; then
+      if [ -e $sandboxPath$releaseSetup1 ]; then
          releaseSetup=$releaseSetup1
       else
          releaseSetup=$releaseSetup2
