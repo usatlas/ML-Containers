@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-01-26-r02
+# version=2024-01-29-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -69,6 +69,8 @@ GITHUB_PATH="run-atlas_container.sh"
 URL_SELF = "https://raw.githubusercontent.com/%s/main/%s" % (GITHUB_REPO, GITHUB_PATH)
 URL_API_SELF = "https://api.github.com/repos/%s/commits?path=%s&per_page=100" % (GITHUB_REPO, GITHUB_PATH)
 CONTAINER_CMDS = ['docker', 'podman', 'singularity']
+ContCmds_available = []
+
 URL_GITLAB = "https://gitlab.cern.ch/api/v4/projects"
 URL_PROJECT_ATLAS = "https://gitlab.cern.ch/api/v4/projects/53790/registry/repositories"
 URL_PROJECT_STAT = "https://gitlab.cern.ch/api/v4/projects/122672/registry/repositories"
@@ -241,7 +243,7 @@ def run_shellCmd(shellCmd, exitOnFailure=True):
        print("!!Error!! Failed in running the following command")
        print("\t", shellCmd)
        sys.exit(1)
-    return out
+    return retCode, out
 
 
 def listImageTags(project):
@@ -311,7 +313,7 @@ def getImageInfo(project, release, printOut=True):
     if len(imageInfo) > 0 and printOut:
        print("Found an image")
        print("\tdockerPath=", imageInfo['dockerPath'], 
-             "; image compressed size=", imageInfo['imageCompressedSize'],
+             "\n\timage compressed size=", imageInfo['imageCompressedSize'],
              "\n\tlast update time=", imageInfo['lastUpdate'])
     return imageInfo
     
@@ -381,7 +383,8 @@ fi
 
 
 # create docker/podman container
-def create_container(contCmd, contName, imageInfo, bindOpt, force=False):
+def create_container(contCmd, contName, imageInfo, bindOpt, args):
+    force = args.force
     dockerPath = imageInfo['dockerPath']
     pullCmd = "%s pull %s" % (contCmd, dockerPath)
     retCode = subprocess.call(pullCmd.split())
@@ -394,11 +397,11 @@ def create_container(contCmd, contName, imageInfo, bindOpt, force=False):
        print("!!Warning!! Pulling the image %s failed, exit now" % dockerPath)
        sys.exit(1)
 
-    out = run_shellCmd("%s ps -a -f name='^%s$' " % (contCmd, contName) )
+    ret, out = run_shellCmd("%s ps -a -f name='^%s$' " % (contCmd, contName) )
     if out.find(contName) > 0:
        if force:
           print("\nThe container=%s already exists, removing it now" % contName)
-          out = run_shellCmd("%s rm -f %s" % (contCmd, contName) )
+          ret, out = run_shellCmd("%s rm -f %s" % (contCmd, contName) )
        else:
           print("\nThe container=%s already exists, \n\tplease rerun the command with the option '-f' to remove it" % contName)
           print("\nQuit now")
@@ -406,14 +409,38 @@ def create_container(contCmd, contName, imageInfo, bindOpt, force=False):
 
     pwd = os.getcwd()
     createOpt = "-it -v %s:%s -w %s %s %s" % (pwd, pwd, pwd, jupyterOpt, bindOpt)
-    # if contCmd == 'podman':
-    #    createOpt += ' --privileged'
     createCmd = "%s create %s --name %s %s" % \
                 (contCmd, createOpt, contName, dockerPath)
-    out = run_shellCmd(createCmd)
+    ret, out = run_shellCmd(createCmd, False)
+    if ret != 0:
+       print("!!Error!! Failed in running the following command")
+       print("\t", createCmd)
+       if 'singularity' in ContCmds_available:
+          if args.contCmd != contCmd:
+             print("\t Next trying another container command 'singularity' again")
+             return setup(args, imageInfo, 'singularity')
+          else:
+             print("\nYou may retry with the option --sing")
+             sys.exit(1)
+       else:
+          sys.exit(1)
 
     startCmd = "%s start %s" % (contCmd, contName)
-    out = run_shellCmd(startCmd)
+    ret, out = run_shellCmd(startCmd, False)
+    if ret != 0:
+       print("!!Error!! Failed in running the following command")
+       print("\t", startCmd)
+       rmCmd = "%s rm -f %s" % (contCmd, contName)
+       run_shellCmd(rmCmd, exitOnFailure=False)
+       if 'singularity' in ContCmds_available:
+          if args.contCmd != contCmd:
+             print("\t Next trying another container command 'singularity' again")
+             return setup(args, imageInfo, 'singularity')
+          else:
+             print("\nYou may retry with the option --sing")
+             sys.exit(1)
+       else:
+          sys.exit(1)
 
 
 # write setup for Docker/Podman container
@@ -423,7 +450,7 @@ def write_dockerSetup(filename, inputArgs, contCmd, contName, imageInfo, bindOpt
     lastUpdate = imageInfo["lastUpdate"]
 
     wcCmd = "%s exec %s wc -l /release_setup.sh /home/atlas/release_setup.sh 2>/dev/null" % (contCmd, contName)
-    releaseSetup = run_shellCmd(wcCmd, exitOnFailure=False)
+    ret, releaseSetup = run_shellCmd(wcCmd, exitOnFailure=False)
     if len(releaseSetup.split('\n')) == 1:
        print("!!Error!! No 'release_setup.sh' is found in the image, exit now")
        sys.exit(1)
@@ -520,13 +547,14 @@ def isLastRelease(filename, project, release, contCmd):
          return True
 
     return False
-
+    
 
 def printMe(args):
     if not os.path.exists(args.shellFilename):
        print("No previous container/sandbox setup is found")
        return None
     myImageInfo = getMyImageInfo(args.shellFilename)
+    # contCmd = myImageInfo["contCmd"]
     if "runOpt" in myImageInfo:
        myImageInfo.pop("runOpt")
     pp = pprint.PrettyPrinter(indent=4)
@@ -557,14 +585,15 @@ def cleanLast(filename):
           os.rename(filename, filename + '.last')
 
 
-def setup(args):
+def prepare_setup(args):
+    global ContCmds_available
     releaseTags = parseArgTags(args.tags, requireRelease=True)
     project = releaseTags['project']
     release = releaseTags['release']
 
     if not args.force:
        if isLastRelease(args.shellFilename, project, release, args.contCmd):
-          return True
+          sys.exit(0)
 
     imageInfo = getImageInfo(project, release)
     # print("Found the release=%s:%s" %(project, release),"\n\t with the dockerPath=",dockerPath, "; image compressed size=",imageSize)
@@ -572,28 +601,36 @@ def setup(args):
 
     dockerPath = imageInfo["dockerPath"]
 
-    contCmds = []
     for cmd in CONTAINER_CMDS:
         cmdFound = which(cmd)
         if cmdFound is not None:
-           contCmds += [cmd]
+           ContCmds_available += [cmd]
 
-    if len(contCmds) == 0:
+    if len(ContCmds_available) == 0:
        print("None of container running commands: docker, podman, singularity; exit now")
        print("Please install one of the above tool first")
        sys.exit(1)
 
-    contCmd = contCmds[0]
+    contCmd = ContCmds_available[0]
     if args.contCmd is not None:
-       if args.contCmd in contCmds:
+       if args.contCmd in ContCmds_available:
           contCmd = args.contCmd
        else:
           print("The specified command=%s to run containers is NOT found" % args.contCmd)
           print("Please choose the available command(s) on the machine to run containers")
-          print("\t",contCmds)
+          print("\t",ContCmds_available)
           sys,exit(1)
 
     cleanLast(args.shellFilename)
+    return imageInfo, contCmd
+
+
+def setup(args, imageInfo=None, contCmd=None):
+    if imageInfo is None:
+       imageInfo, contCmd = prepare_setup(args)
+
+    dockerPath = imageInfo["dockerPath"]
+    project, release = dockerPath.split('/')[-1].split(':')
 
     paths = args.volume
     volumes = []
@@ -629,7 +666,7 @@ def setup(args):
            else:
               bindOpt += " -v %s:%s" % (path, path)
 
-       create_container(contCmd, contName, imageInfo, bindOpt, args.force)
+       create_container(contCmd, contName, imageInfo, bindOpt, args)
        write_dockerSetup(args.shellFilename, args.tags, contCmd, contName, imageInfo, bindOpt, args.force)
 
     sleep(1)
@@ -649,8 +686,8 @@ def main():
 
     example_global = """Examples:
 
-  source %s listReleases AthAnalysis
-  source %s listReleases AthAnalysis,"21.2.2*"
+  source %s list AthAnalysis
+  source %s list AthAnalysis,"21.2.2*"
   source %s AnalysisBase:latest
   source %s            # Empty arg to rerun the already setup container
   source %s setup AnalysisBase,21.2.132""" % ((myScript,)*5)
@@ -666,12 +703,12 @@ def main():
     parser.add_argument('--version', action='store_true', help="print out the script version")
     sp = parser.add_subparsers(dest='command', help='Default=setup')
 
-    sp_listReleases = sp.add_parser('listReleases', help='list container releases', description='list all available ATLAS releases of a given project')
+    sp_listReleases = sp.add_parser('listReleases', aliases=['list'], help='list container releases', description='list all available ATLAS releases of a given project')
     # sp_listReleases.add_argument('projectName', metavar='<ProjectName>', help='Project name to list releases')
     sp_listReleases.add_argument('tags', nargs='*', metavar='<ReleaseTags>', help='Project name to list releases, and release number with wildcard *')
     sp_listReleases.set_defaults(func=listReleases)
 
-    sp_printImageInfo = sp.add_parser('printImageInfo', help='print Info of a container release', description='print the image size and last update date of the given image')
+    sp_printImageInfo = sp.add_parser('printImageInfo', aliases=['getImageInfo'], help='print Info of a container release', description='print the image size and last update date of the given image')
     sp_printImageInfo.add_argument('tags', nargs='+', metavar='<ReleaseTags>')
     sp_printImageInfo.set_defaults(func=printImageInfo)
 
