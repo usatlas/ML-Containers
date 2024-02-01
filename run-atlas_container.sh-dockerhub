@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-01-29-r01
+# version=2024-02-01-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -65,8 +65,11 @@ from subprocess import getstatusoutput
 from urllib.request import urlopen, Request
 
 
-URL_SELF = "https://raw.githubusercontent.com/usatlas/ML-Containers/main/run-atlas_container.sh"
-CONTAINER_CMDS = ['podman', 'docker', 'singularity']
+GITHUB_REPO="usatlas/ML-Containers"
+GITHUB_PATH="run-atlas_container.sh"
+URL_SELF = "https://raw.githubusercontent.com/%s/main/%s" % (GITHUB_REPO, GITHUB_PATH)
+URL_API_SELF = "https://api.github.com/repos/%s/commits?path=%s&per_page=100" % (GITHUB_REPO, GITHUB_PATH)
+CONTAINER_CMDS = ['docker', 'podman', 'singularity']
 ContCmds_available = []
 
 ATLAS_PROJECTS = ['athena', 'analysisbase', 'athanalysis', 'analysistop', 'athsimulation', 'rucio-clients']
