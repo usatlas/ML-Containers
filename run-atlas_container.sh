@@ -721,17 +721,17 @@ def main():
 
     example_global = """Examples:
 
-  %s list AthAnalysis
-  %s list AthAnalysis,"21.2.2*"
-  %s list AthAnalysis,24,alma9
-  %s AnalysisBase:latest
-  %s    # Empty arg to rerun the already setup container
-  %s setup AnalysisBase,21.2.132""" % ((myScript,)*6)
+  ./%s list AthAnalysis
+  ./%s list AthAnalysis,"21.2.2*"
+  ./%s list AthAnalysis,24,alma9
+  ./%s AnalysisBase:latest
+  ./%s    # Empty arg to rerun the already setup container
+  ./%s setup AnalysisBase,21.2.132""" % ((myScript,)*6)
 
     example_setup = """Examples:
 
-  %s AnalysisBase,21.2.132
-  %s --sing AnalysisBase,21.2.132""" % (myScript, myScript)
+  ./%s AnalysisBase,21.2.132
+  /.%s --sing AnalysisBase,21.2.132""" % (myScript, myScript)
 
     parser = argparse.ArgumentParser(epilog=example_global, usage='%(prog)s [options]', formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--shellFilename', action='store', help=argparse.SUPPRESS)
