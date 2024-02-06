@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-01-29-r01
+# version=2024-02-06-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -108,8 +108,8 @@ class Version(str):
 
   def __lt__(self, other):
  
-     va = re.split('[.-]', self)
-     vb = re.split('[.-]', other)
+     va = re.split(r'[.-]', self)
+     vb = re.split(r'[.-]', other)
 
      # print("va=",va, "; vb=",vb)
 
@@ -177,7 +177,7 @@ def getVersion(myFile=None):
         no += 1
         if no > 10:
            break
-        if re.search('^#.* version', line):
+        if re.search(r'^#.* version', line):
            version = line.split('=')[1]
            break
 
@@ -191,19 +191,24 @@ def parseArgTags(inputArgs, requireRelease=False):
     argTags = []
     releaseTags = {}
     for arg in inputArgs:
-        argTags += re.split(',|:', arg)
+        argTags += re.split(r'[,:]', arg)
     for tag in argTags:
+       if len(tag) == 0:
+          continue
        if tag.lower() in ATLAS_PROJECTS:
           releaseTags['project'] = tag.lower()
        # elif tag == 'latest' or tag[0].isdigit():
        else:
-          releaseTags['release'] = tag
+          if 'releases' not in releaseTags:
+             releaseTags['releases'] = [tag]
+          else:
+             releaseTags['releases'] += [tag]
           # print("!!Warning!! Unrecognized input arg=", tag)
 
     if 'project' not in releaseTags:
        print("!!Warning!! No project is provided from the choice of ", ATLAS_PROJECTS)
        sys.exit(1)
-    if requireRelease and 'release' not in releaseTags:
+    if requireRelease and 'releases' not in releaseTags:
        print("!!Warning!! No release is given")
        sys.exit(1)
 
@@ -272,19 +277,44 @@ def listReleases(args):
 
     releaseTags = parseArgTags(inputTags, requireRelease=False)
     project = releaseTags['project']
-    if 'release' in releaseTags:
-       release = releaseTags['release']
+    if 'releases' in releaseTags:
+       releases = releaseTags['releases']
     else:
-       release = None
+       releases = None
     imageTags, repoID = listImageTags(project)
     releasePrint = ""
-    if release is None:
+    if releases is None:
        tags = imageTags
     else:
        tags = []
-       releasePrint = " matching release=%s" % release
+       releasesWild = []
+       releasesNoWild = []
+       for release in releases:
+          if '*' in release or '?' in release:
+             releasesWild += [release]
+          else:
+             releasesNoWild += [release]
+       releasePrint = " matching release=%s" % releases
        for tagName in imageTags:
-           if fnmatch.fnmatch(tagName, release):
+           matchTag = True
+           for releaseWild in releasesWild:
+               if not fnmatch.fnmatch(tagName, releaseWild):
+                  matchTag = False
+                  break
+           if not matchTag:
+              continue
+           for releaseNoWild in releasesNoWild:
+               item_1 = releaseNoWild.split(r'.')[0]
+               if item_1.isdigit() and len(item_1) < 4:
+                  if not tagName.startswith(releaseNoWild):
+                     matchTag = False
+                     break
+               else:
+                  if releaseNoWild != tagName and releaseNoWild not in re.split(r'[-.]', tagName):
+                     matchTag = False
+                     break
+           if matchTag:
+           # if fnmatch.fnmatch(tagName, release) or release in re.split(r'[-.]', tagName):
               tags += [ tagName ]
     tags.sort(key=Version)
     if len(tags) > 0:
@@ -321,8 +351,10 @@ def getImageInfo(project, release, printOut=True):
 def printImageInfo(args):
     releaseTags = parseArgTags(args.tags, requireRelease=True)
     project = releaseTags['project']
-    release = releaseTags['release']
-    getImageInfo(project, release)
+    releases = releaseTags['releases']
+    if len(releases) > 1:
+       print("Only one release tag is allowed, but multiple are given \n\t", releases)
+    getImageInfo(project, releases[0])
 
 
 # build Singularity sandbox
@@ -589,7 +621,10 @@ def prepare_setup(args):
     global ContCmds_available
     releaseTags = parseArgTags(args.tags, requireRelease=True)
     project = releaseTags['project']
-    release = releaseTags['release']
+    releases = releaseTags['releases']
+    if len(releases) > 1:
+       print("Only one release tag is allowed, but multiple are given \n\t", releases)
+    release = releases[0]
 
     if not args.force:
        if isLastRelease(args.shellFilename, project, release, args.contCmd):
@@ -686,18 +721,19 @@ def main():
 
     example_global = """Examples:
 
-  source %s list AthAnalysis
-  source %s list AthAnalysis,"21.2.2*"
-  source %s AnalysisBase:latest
-  source %s            # Empty arg to rerun the already setup container
-  source %s setup AnalysisBase,21.2.132""" % ((myScript,)*5)
+  %s list AthAnalysis
+  %s list AthAnalysis,"21.2.2*"
+  %s list AthAnalysis,24,alma9
+  %s AnalysisBase:latest
+  %s    # Empty arg to rerun the already setup container
+  %s setup AnalysisBase,21.2.132""" % ((myScript,)*6)
 
     example_setup = """Examples:
 
-  source %s AnalysisBase,21.2.132
-  source %s --sing 21.2.132""" % (myScript, myScript)
+  %s AnalysisBase,21.2.132
+  %s --sing AnalysisBase,21.2.132""" % (myScript, myScript)
 
-    parser = argparse.ArgumentParser(epilog=example_global, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(epilog=example_global, usage='%(prog)s [options]', formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--shellFilename', action='store', help=argparse.SUPPRESS)
     parser.add_argument('--rerun', action='store_true', help="rerun the already setup container")
     parser.add_argument('--version', action='store_true', help="print out the script version")
