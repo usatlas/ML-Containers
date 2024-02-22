@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-02-06-r01
+# version=2024-02-08-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -25,20 +25,22 @@ else
    if [ "X" != "X$BASH_SOURCE" ]; then
       shopt -s expand_aliases
    fi
-   alias py_readlink="python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))'"
-   alias py_stat="python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))'"
+   # alias py_readlink="python3 -I -S -c 'import os,sys;print(os.path.realpath(sys.argv[1]))'"
+   # alias py_stat="python3 -I -S -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))'"
    myDir=$(dirname $myScript)
-   myDir=$(py_readlink $myDir)
+   myDir=$(readlink -f $myDir)
+   # myDir=$(py_readlink $myDir)
    now=$(date +"%s")
-   python3 -I "$myScript" --shellFilename $mySetup "$@"
+   python3 -B -I -S "$myScript" --shellFilename $mySetup "$@"
    ret=$?
    if [ -e $mySetup ]; then
       # check if the setup script is newly created
-      mtime_setup=$(py_stat $mySetup)
+      # mtime_setup=$(py_stat $mySetup)
+      mtime_setup=$(stat -c %Y $mySetup 2>/dev/null || stat -f %m $mySetup)
       if [ "$(( $mtime_setup - $now ))" -gt 0 ]; then
          echo -e "\nTo reuse the same container next time, just run"
          echo -e "\n\t source $mySetup \n or \n\t source $myScript"
-         sleep 3
+         sleep 2
          source $mySetup
       fi
    fi
@@ -297,6 +299,9 @@ def listReleases(args):
        releasePrint = " matching release=%s" % releases
        for tagName in imageTags:
            matchTag = True
+           if len(releases) == 1 and tagName == releases[0]:
+              tags = [tagName]
+              break
            for releaseWild in releasesWild:
                if not fnmatch.fnmatch(tagName, releaseWild):
                   matchTag = False
@@ -321,6 +326,9 @@ def listReleases(args):
        pp = pprint.PrettyPrinter(indent=4, compact=True)
        print("Found the following release containers for the project= %s %s\n" % (project, releasePrint))
        pp.pprint(tags)
+       if len(tags) == 1:
+          print()
+          getImageInfo(project, tags[0])
     else:
        print("No release container found for the project=", project, releasePrint)
 
@@ -341,7 +349,7 @@ def getImageInfo(project, release, printOut=True):
     imageInfo['lastUpdate'] = json_obj['created_at']
 
     if len(imageInfo) > 0 and printOut:
-       print("Found an image")
+       print("The match image info:")
        print("\tdockerPath=", imageInfo['dockerPath'], 
              "\n\timage compressed size=", imageInfo['imageCompressedSize'],
              "\n\tlast update time=", imageInfo['lastUpdate'])
@@ -354,6 +362,7 @@ def printImageInfo(args):
     releases = releaseTags['releases']
     if len(releases) > 1:
        print("Only one release tag is allowed, but multiple are given \n\t", releases)
+       sys.exit(1)
     getImageInfo(project, releases[0])
 
 
