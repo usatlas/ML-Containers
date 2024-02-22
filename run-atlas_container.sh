@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-02-08-r01
+# version=2024-02-22-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -208,7 +208,8 @@ def parseArgTags(inputArgs, requireRelease=False):
           # print("!!Warning!! Unrecognized input arg=", tag)
 
     if 'project' not in releaseTags:
-       print("!!Warning!! No project is provided from the choice of ", ATLAS_PROJECTS)
+       print("The input argument=",inputArgs)
+       print("!!Warning!! No project is given from the available choices:", ATLAS_PROJECTS)
        sys.exit(1)
     if requireRelease and 'releases' not in releaseTags:
        print("!!Warning!! No release is given")
@@ -296,7 +297,7 @@ def listReleases(args):
              releasesWild += [release]
           else:
              releasesNoWild += [release]
-       releasePrint = " matching release=%s" % releases
+       releasePrint = "matching release tag(s)=%s" % releases
        for tagName in imageTags:
            matchTag = True
            if len(releases) == 1 and tagName == releases[0]:
@@ -324,7 +325,7 @@ def listReleases(args):
     tags.sort(key=Version)
     if len(tags) > 0:
        pp = pprint.PrettyPrinter(indent=4, compact=True)
-       print("Found the following release containers for the project= %s %s\n" % (project, releasePrint))
+       print("Found the following release containers for the project= %s, %s\n" % (project, releasePrint))
        pp.pprint(tags)
        if len(tags) == 1:
           print()
@@ -349,7 +350,7 @@ def getImageInfo(project, release, printOut=True):
     imageInfo['lastUpdate'] = json_obj['created_at']
 
     if len(imageInfo) > 0 and printOut:
-       print("The match image info:")
+       print("The matched image info:")
        print("\tdockerPath=", imageInfo['dockerPath'], 
              "\n\timage compressed size=", imageInfo['imageCompressedSize'],
              "\n\tlast update time=", imageInfo['lastUpdate'])
@@ -731,8 +732,8 @@ def main():
     example_global = """Examples:
 
   ./%s list AthAnalysis
-  ./%s list AthAnalysis,"21.2.2*"
-  ./%s list AthAnalysis,24,alma9
+  ./%s list athanalysis,"21.2.2*"
+  ./%s list AnalysisBase,24.2,alma9
   ./%s AnalysisBase:latest
   ./%s    # Empty arg to rerun the already setup container
   ./%s setup AnalysisBase,21.2.132""" % ((myScript,)*6)
