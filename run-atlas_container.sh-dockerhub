@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-02-22-r01
+# version=2024-02-27-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -19,7 +19,8 @@ if [[ -e $mySetup && ( $# -eq 0 || "$@" =~ "--rerun" ) ]]; then
    source $mySetup
    ret=$?
 elif [[ $# -eq 1 && "$1" =~ ^[Jj]upyter$ ]]; then
-   source $mySetup jupyter
+   # source $mySetup jupyter
+   echo "Jupyter is not ready yet"
    ret=$?
 else
    if [ "X" != "X$BASH_SOURCE" ]; then
@@ -61,6 +62,7 @@ import pprint
 import re
 import subprocess
 import fnmatch
+import difflib
 
 from shutil import which, rmtree
 from subprocess import getstatusoutput
@@ -111,7 +113,7 @@ def set_default_subparser(parser, default_subparser, index_action=1):
 
     subparser_found = False
     for arg in sys.argv[1:]:
-        if arg in ['-h', '--help', '--version']:  # global help or version, no default subparser
+        if arg in ['-h', '--help', '-V', '--version']:  # global help or version, no default subparser
             break
     else:
         for x in parser._subparsers._actions:
@@ -180,8 +182,15 @@ def parseArgTags(inputArgs, requireRelease=False):
           # print("!!Warning!! Unrecognized input arg=", tag)
 
     if 'project' not in releaseTags:
-       print("The input argument=",inputArgs)
+       print("The input arg tags=", argTags)
        print("!!Warning!! No project is given from the available choices:", ATLAS_PROJECTS)
+       for argTag in argTags:
+           if closeProject := difflib.get_close_matches(argTag.lower(), ATLAS_PROJECTS, n=1, cutoff=0.8):
+              print()
+              print("The closest matched project=", closeProject[0])
+              print("  against the input arg tag=", argTag)
+              print("\nPlease correct it, then rerun\n")
+              break
        sys.exit(1)
     if requireRelease and 'releases' not in releaseTags:
        print("!!Warning!! No release is given")
@@ -312,7 +321,7 @@ def listReleases(args):
           print()
           getImageInfo(project, tags[0])
     else:
-       print("No release container found for the project=", project, releasePrint)
+       print("No release container found for the project=%s, and %s" % (project, releasePrint))
 
 
 def getImageInfo(project, release, printOut=True):
@@ -556,7 +565,11 @@ def getMyImageInfo(filename):
 def isLastRelease(filename, project, release, contCmd):
     if not os.path.exists(filename):
        return False
+
     myImageInfo = getMyImageInfo(filename)
+    if 'dockerPath' not in myImageInfo:
+       return False
+
     dockerPath = myImageInfo["dockerPath"]
     if dockerPath.endswith("/%s:%s" % (project, release)):
       if contCmd is None or contCmd == myImageInfo["contCmd"]:
@@ -722,7 +735,7 @@ def main():
     parser = argparse.ArgumentParser(epilog=example_global, usage='%(prog)s [options]', formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--shellFilename', action='store', help=argparse.SUPPRESS)
     parser.add_argument('--rerun', action='store_true', help="rerun the already setup container")
-    parser.add_argument('--version', action='store_true', help="print out the script version")
+    parser.add_argument('-V', '--version', action='store_true', help="print out the script version")
     sp = parser.add_subparsers(dest='command', help='Default=setup')
 
     sp_listReleases = sp.add_parser('listReleases', aliases=['list'], help='list container releases', description='list all available ATLAS releases of a given project')
