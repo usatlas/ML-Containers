@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-02-27-r01
+# version=2024-03-02-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -213,13 +213,24 @@ def parseArgTags(inputArgs, requireRelease=False):
        print("The input arg tags=", argTags)
        print("!!Warning!! No project is given from the available choices:", ATLAS_PROJECTS)
        for argTag in argTags:
-           if closeProject := difflib.get_close_matches(argTag.lower(), ATLAS_PROJECTS, n=1, cutoff=0.8):
+           closeProject = None
+           argTag_1 = re.split(r'[-.=;]', argTag, 1)[0].lower()
+           if argTag_1 in ATLAS_PROJECTS:
+              closeProject = argTag_1
+           if not closeProject:
+              closeMatch = difflib.get_close_matches(argTag.lower(), ATLAS_PROJECTS, n=1, cutoff=0.8)
+              if closeMatch:
+                 closeProject = closeMatch[0]
+           if closeProject:
               print()
-              print("The closest matched project=", closeProject[0])
+              if isinstance(closeProject, list):
+                 closeProject = closeProject[0]
+              print("The closest matched project=", closeProject)
               print("  against the input arg tag=", argTag)
               print("\nPlease correct it, then rerun\n")
               break
        sys.exit(1)
+
     if requireRelease and 'releases' not in releaseTags:
        print("!!Warning!! No release is given")
        sys.exit(1)
@@ -333,12 +344,15 @@ def listReleases(args):
               tags += [ tagName ]
     tags.sort(key=Version)
     if len(tags) > 0:
-       pp = pprint.PrettyPrinter(indent=4, compact=True)
+       columns = os.get_terminal_size().columns
+       pp = pprint.PrettyPrinter(indent=4, compact=True, width=columns)
        print("Found the following release containers for the project= %s, %s\n" % (project, releasePrint))
        pp.pprint(tags)
        if len(tags) == 1:
           print()
           getImageInfo(project, tags[0])
+          print("\nTo run the above image, just run")
+          print("\tsource %s %s,%s" % (sys.argv[0], project, tags[0]))
     else:
        print("No release container found for the project=%s, and %s" % (project, releasePrint))
 
@@ -357,12 +371,14 @@ def getImageInfo(project, release, printOut=True):
     imageInfo['dockerPath' ] = json_obj['location']
     imageInfo['imageCompressedSize'] = json_obj['total_size']
     imageInfo['lastUpdate'] = json_obj['created_at']
+    imageInfo['digest'] = json_obj['digest']
 
     if len(imageInfo) > 0 and printOut:
        print("The matched image info:")
        print("\tdockerPath=", imageInfo['dockerPath'], 
              "\n\timage compressed size=", imageInfo['imageCompressedSize'],
-             "\n\tlast update time=", imageInfo['lastUpdate'])
+             "\n\tlast update time=", imageInfo['lastUpdate'],
+             "\n\tdigest=", imageInfo['digest'])
     return imageInfo
     
 
