@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2023-12-07-r01
+# version=2024-03-06-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -30,7 +30,7 @@ else
    myDir=$(dirname $myScript)
    myDir=$(py_readlink $myDir)
    now=$(date +"%s")
-   python3 -I "$myScript" --shellFilename $mySetup "$@"
+   python3 -B -I -S "$myScript" --shellFilename $mySetup "$@"
    ret=$?
    if [ -e $mySetup ]; then
       # check if the setup script is newly created
@@ -49,7 +49,7 @@ fi
 import getpass
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from time import sleep
 
 import argparse
@@ -59,9 +59,10 @@ import pprint
 import re
 import subprocess
 
-from shutil import which
+from shutil import which, rmtree
 from subprocess import getstatusoutput
 from urllib.request import urlopen, Request
+import ssl
 
 
 GITHUB_REPO="usatlas/ML-Containers"
@@ -106,7 +107,7 @@ def set_default_subparser(parser, default_subparser, index_action=1):
 
     subparser_found = False
     for arg in sys.argv[1:]:
-        if arg in ['-h', '--help', '--version']:  # global help or version, no default subparser
+        if arg in ['-h', '--help', '-V', '--version']:  # global help or version, no default subparser
             break
     else:
         for x in parser._subparsers._actions:
@@ -120,12 +121,20 @@ def set_default_subparser(parser, default_subparser, index_action=1):
             sys.argv.insert(index_action, default_subparser) 
 
 
+def getUrlContent(url):
+    try:
+       response = urlopen(url)
+    except:
+       ssl_context = ssl._create_unverified_context()
+       response = urlopen(url, context=ssl_context)
+    return response.read().decode('utf-8')
+
+
 def getLastCommit():
-    response = urlopen(URL_API_SELF)
-    json_obj = json.loads(response.read().decode('utf-8'))
+    json_obj = json.loads(getUrlContent(URL_API_SELF))
     recentCommit = json_obj[0]['commit']['committer']['date']
     myScript =  os.path.abspath(sys.argv[0])
-    myMTime = datetime.utcfromtimestamp(os.path.getmtime(myScript))
+    myMTime = datetime.fromtimestamp(os.path.getmtime(myScript), tz=timezone.utc) 
     myDate = myMTime.strftime('%Y-%m-%dT%H:%M:%SZ')
     return myDate, recentCommit
 
@@ -146,7 +155,7 @@ def getVersion(myFile=None):
         no += 1
         if no > 10:
            break
-        if re.search('^#.* version', line):
+        if re.search(r'^#.* version', line):
            version = line.split('=')[1]
            break
 
@@ -161,9 +170,7 @@ def selfUpdate(args):
     myDate, recentCommit = getLastCommit()
     print("The most recent GitHub commit's UTC timestamp is", recentCommit)
 
-    resource = urlopen(URL_SELF)
-    content = resource.read().decode('utf-8')
-    latestVersion = getVersion(content)
+    latestVersion = getVersion(getUrlContent(URL_SELF))
     if latestVersion > currentVersion or (latestVersion == currentVersion and recentCommit > myDate):
        print("Update available, updating the script itself")
        myScript =  os.path.abspath(sys.argv[0])
@@ -224,8 +231,7 @@ def getImageInfo(args, imageFullName=None, printOut=True):
     dockerPath = IMAGE_CONFIG[imageFullName]["dockerPath"].replace("{FullName}",imageName)
     url_tags = DOCKERHUB_REPO + dockerPath.replace("docker.io/","") +"/tags"
     # print("tags_url=", url_tags)
-    response = urlopen(url_tags)
-    json_obj = json.loads(response.read().decode('utf-8'))
+    json_obj = json.loads(getUrlContent(url_tags))
     json_tags = json_obj['results']
     json_tag = None
     for dict_tag in json_tags:
@@ -258,7 +264,7 @@ def getImageInfo(args, imageFullName=None, printOut=True):
              return {"imageSize":imageSize, "lastUpdate":lastUpdate, "imageDigest":imageDigest}
     else:
        print("!!Warning!! No tag name=%s is found for the image name=%s" % (tagName, imageName) )
-       sys,exit(1)
+       sys.exit(1)
     
 
 def listPackages(args):
@@ -278,9 +284,7 @@ def listPackages(args):
        print("\nFound imageName=",imageName, " with the following installed pkgs:")
        url = IMAGE_CONFIG[imageName]["listURL"].replace("{Name}",baseName)
        try:
-          resource = urlopen(url)
-          content = resource.read().decode('utf-8')
-          print(content)
+          print(getUrlContent(url))
        except:
           print("Failed in opening the following URL", url)
           sys.exit(1)
@@ -308,7 +312,7 @@ def listNewPkgs(contCmd, contNamePath, lastLineN):
               removeIt = False
            items = ast.literal_eval(lineObj.strip())
            for item in items:
-               key, delim, value = (re.split('(<|=|>)', item, 1) + [None]*2)[:3]
+               key, delim, value = (re.split(r'(<|=|>)', item, 1) + [None]*2)[:3]
                if value is None:
                   value = ''
                else:
@@ -664,41 +668,6 @@ def setup(args):
     sleep(1)
 
 
-def getMyImageInfo(filename):
-    shellFile = open(filename, 'r')
-    myImageInfo = {}
-    for line in shellFile:
-       if re.search(r'^(cont|image|docker|sand|runOpt|lines).*=', line):
-          key, value = line.strip().split('=')
-          myImageInfo[key] = value
-    return myImageInfo
-
-
-def printMe(args):
-    if not os.path.exists(args.shellFilename):
-       print("No previous container/sandbox setup is found")
-       return None
-    myImageInfo = getMyImageInfo(args.shellFilename)
-    contCmd = myImageInfo["contCmd"]
-    linesCondaHistory = myImageInfo.pop("linesCondaHistory")
-    if "runOpt" in myImageInfo:
-       myImageInfo.pop("runOpt")
-    pp = pprint.PrettyPrinter(indent=4)
-    print("The image/container used in the current work directory:")
-    pp.pprint(myImageInfo)
-    if contCmd == 'singularity':
-       contNamePath = myImageInfo["sandboxPath"]
-    else:
-       contNamePath = myImageInfo["contName"]
-    pkgs, channels = listNewPkgs(contCmd, contNamePath, linesCondaHistory)
-    if len(pkgs) > 0:
-       print("\nThe following additional pkgs and their dependencies are installed")
-       pp.pprint(pkgs)
-    if len(channels) > 0:
-       print("\nThe following channels besides the default channel 'conda-forge' are needed")
-       pp.pprint(channels)
-
-
 def update(args):
     if not os.path.exists(args.shellFilename):
        print("No previous container/sandbox setup is found")
@@ -758,24 +727,21 @@ def getImageLabels(imageName, tag):
     if imageName.find('/') < 0:
        imageName = 'yesw2000/' + imageName
     url_token = "https://auth.docker.io/token?scope=repository:%s:pull&service=registry.docker.io" % imageName
-    response = urlopen(url_token)
-    json_obj = json.loads(response.read().decode('utf-8'))
+    json_obj = json.loads(getUrlContent(url_token))
     token = json_obj["token"]
 
     url_digest = "https://registry-1.docker.io/v2/%s/manifests/%s" % (imageName, tag)
     req =  Request(url_digest)
     req.add_header('Accept', 'application/vnd.oci.image.manifest.v1+json')
     req.add_header('Authorization', 'Bearer %s' % token)
-    response = urlopen(req)
-    json_obj = json.loads(response.read().decode('utf-8'))
+    json_obj = json.loads(getUrlContent(req))
     digest = json_obj['config']['digest']
 
     url_inspect = "https://registry-1.docker.io/v2/%s/blobs/%s" % (imageName, digest)
     req =  Request(url_inspect)
     req.add_header('Accept', 'application/vnd.oci.image.manifest.v1+json')
     req.add_header('Authorization', 'Bearer %s' % token)
-    response = urlopen(req)
-    json_obj = json.loads(response.read().decode('utf-8'))
+    json_obj = json.loads(getUrlContent(req))
     labels = json_obj['config']['Labels']
 
     return labels
@@ -797,10 +763,10 @@ def main():
   source %s ml-base:centos7-python39
   source %s --sing ml-base:centos7-python39""" % (myScript, myScript)
 
-    parser = argparse.ArgumentParser(epilog=example_global, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(epilog=example_global, usage='%(prog)s [options]', formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--shellFilename', action='store', help=argparse.SUPPRESS)
     parser.add_argument('--rerun', action='store_true', help="rerun the already setup container")
-    parser.add_argument('--version', action='store_true', help="print out the script version")
+    parser.add_argument('-V', '--version', action='store_true', help="print out the script version")
     sp = parser.add_subparsers(dest='command', help='Default=setup')
 
     desc = 'list all available ML images'
@@ -843,7 +809,7 @@ def main():
     sp_jupyter = sp.add_parser('jupyter', help='run Jupyter with the container', description='run JupyterLab on the already created container/sandbox')
     sp_jupyter.set_defaults(func=jupyter)
 
-    args, extra = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
 
     if args.version:
        version = getVersion()

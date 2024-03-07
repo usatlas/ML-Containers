@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-03-02-r01
+# version=2024-03-06-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -52,11 +52,11 @@ fi
 import getpass
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from time import sleep
 
 import argparse
-import ast
+# import ast
 import json
 import pprint
 import re
@@ -66,7 +66,8 @@ import difflib
 
 from shutil import which, rmtree
 from subprocess import getstatusoutput
-from urllib.request import urlopen, Request
+from urllib.request import urlopen
+import ssl
 
 GITHUB_REPO="usatlas/ML-Containers"
 GITHUB_PATH="run-atlas_container.sh"
@@ -155,12 +156,20 @@ def set_default_subparser(parser, default_subparser, index_action=1):
             sys.argv.insert(index_action, default_subparser) 
 
 
+def getUrlContent(url):
+    try:
+       response = urlopen(url)
+    except:
+       ssl_context = ssl._create_unverified_context()
+       response = urlopen(url, context=ssl_context)
+    return response.read().decode('utf-8')
+
+
 def getLastCommit():
-    response = urlopen(URL_API_SELF)
-    json_obj = json.loads(response.read().decode('utf-8'))
+    json_obj = json.loads(getUrlContent(URL_API_SELF))
     recentCommit = json_obj[0]['commit']['committer']['date']
     myScript =  os.path.abspath(sys.argv[0])
-    myMTime = datetime.utcfromtimestamp(os.path.getmtime(myScript))
+    myMTime = datetime.fromtimestamp(os.path.getmtime(myScript), tz=timezone.utc)
     myDate = myMTime.strftime('%Y-%m-%dT%H:%M:%SZ')
     return myDate, recentCommit
 
@@ -243,8 +252,7 @@ def selfUpdate(args):
     myDate, recentCommit = getLastCommit()
     print("The most recent GitHub commit's UTC timestamp is", recentCommit)
 
-    resource = urlopen(URL_SELF)
-    content = resource.read().decode('utf-8')
+    content = getUrlContent(URL_SELF)
     latestVersion = getVersion(content)
     if latestVersion > currentVersion or (latestVersion == currentVersion and recentCommit > myDate):
        print("Update available, updating the script itself")
@@ -276,8 +284,7 @@ def run_shellCmd(shellCmd, exitOnFailure=True):
 
 def listImageTags(project):
     url_tags = (IMAGE_CONFIG[project])["url_repos"] + "?tags=true"
-    response = urlopen(url_tags)
-    json_obj = json.loads(response.read().decode('utf-8'))
+    json_obj = json.loads(getUrlContent(url_tags))
     repoID = None
     json_tags = {}
     for repo in json_obj:
@@ -304,7 +311,7 @@ def listReleases(args):
        releases = releaseTags['releases']
     else:
        releases = None
-    imageTags, repoID = listImageTags(project)
+    imageTags, _ = listImageTags(project)
     releasePrint = ""
     if releases is None:
        tags = imageTags
@@ -365,8 +372,7 @@ def getImageInfo(project, release, printOut=True):
        sys.exit(1)
 
     url_tag = (IMAGE_CONFIG[project])["url_repos"] + "/%s/tags/%s" % (repoID, release)
-    response = urlopen(url_tag)
-    json_obj = json.loads(response.read().decode('utf-8'))
+    json_obj = json.loads(getUrlContent(url_tag))
 
     imageInfo['dockerPath' ] = json_obj['location']
     imageInfo['imageCompressedSize'] = json_obj['total_size']
@@ -455,8 +461,8 @@ def create_container(contCmd, contName, imageInfo, bindOpt, args):
     dockerPath = imageInfo['dockerPath']
     pullCmd = "%s pull %s" % (contCmd, dockerPath)
     retCode = subprocess.call(pullCmd.split())
-    username = getpass.getuser()
-    home = os.path.expanduser("~")
+    # username = getpass.getuser()
+    # home = os.path.expanduser("~")
     jupyterOpt = ""
     # jupyterOpt = "-p 8888:8888 -e NB_USER=%s -e HOME=%s -v %s:%s" % (username, home, home, home)
     # jupyterOpt += " -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro"
@@ -673,7 +679,7 @@ def prepare_setup(args):
     # print("Found the release=%s:%s" %(project, release),"\n\t with the dockerPath=",dockerPath, "; image compressed size=",imageSize)
     # sys.exit(0)
 
-    dockerPath = imageInfo["dockerPath"]
+    # dockerPath = imageInfo["dockerPath"]
 
     for cmd in CONTAINER_CMDS:
         cmdFound = which(cmd)
@@ -693,7 +699,7 @@ def prepare_setup(args):
           print("The specified command=%s to run containers is NOT found" % args.contCmd)
           print("Please choose the available command(s) on the machine to run containers")
           print("\t",ContCmds_available)
-          sys,exit(1)
+          sys.exit(1)
 
     cleanLast(args.shellFilename)
     return imageInfo, contCmd
@@ -810,7 +816,7 @@ def main():
     sp_jupyter = sp.add_parser('jupyter', help='(not ready) run Jupyter with the container', description='(not ready yet)run JupyterLab on the already created container/sandbox')
     sp_jupyter.set_defaults(func=jupyter)
 
-    args, extra = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
 
     if args.version:
        version = getVersion()
