@@ -372,7 +372,7 @@ def listReleases(args):
 def getImageInfo(project, release, printOut=True):
     imageInfo = {}
     imageTags, repoID = listImageTags(project)
-    if not release in imageTags:
+    if release not in imageTags:
        print("!!Warning!! release=%s is NOT available" % release)
        sys.exit(1)
 
