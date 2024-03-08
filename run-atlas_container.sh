@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-03-06-r01
+# version=2024-03-08-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -31,18 +31,23 @@ else
    myDir=$(dirname $myScript)
    myDir=$(readlink -f $myDir)
    # myDir=$(py_readlink $myDir)
-   now=$(date +"%s")
-   python3 -B -I -S "$myScript" --shellFilename $mySetup "$@"
-   ret=$?
-   if [ -e $mySetup ]; then
-      # check if the setup script is newly created
-      # mtime_setup=$(py_stat $mySetup)
-      mtime_setup=$(stat -c %Y $mySetup 2>/dev/null || stat -f %m $mySetup)
-      if [ "$(( $mtime_setup - $now ))" -gt 0 ]; then
-         echo -e "\nTo reuse the same container next time, just run"
-         echo -e "\n\t source $mySetup \n or \n\t source $myScript"
-         sleep 2
-         source $mySetup
+   if [[ $# -eq 0 ]]; then
+       python3 -B -I "$myScript" --help
+       ret=$?
+   else
+      now=$(date +"%s")
+      python3 -B -I -S "$myScript" --shellFilename $mySetup "$@"
+      ret=$?
+      if [ -e $mySetup ]; then
+         # check if the setup script is newly created
+         # mtime_setup=$(py_stat $mySetup)
+         mtime_setup=$(stat -c %Y $mySetup 2>/dev/null || stat -f %m $mySetup)
+         if [ "$(( $mtime_setup - $now ))" -ge 0 ]; then
+            echo -e "\nTo reuse the same container next time, just run"
+            echo -e "\n\t source $mySetup \n or \n\t source $myScript"
+            sleep 2
+            source $mySetup
+         fi
       fi
    fi
 fi
@@ -53,7 +58,7 @@ import getpass
 import os
 import sys
 from datetime import datetime, timezone
-from time import sleep
+# from time import sleep
 
 import argparse
 # import ast
@@ -619,7 +624,7 @@ def isLastRelease(filename, project, release, contCmd):
     if dockerPath.endswith("/%s:%s" % (project, release)):
       if contCmd is None or contCmd == myImageInfo["contCmd"]:
          print("The release was previously used in the current directory.\n\t Reuse it now")
-         sleep(1)
+         # sleep(1)
          os.utime(filename, None)
          return True
 
@@ -749,7 +754,7 @@ def setup(args, imageInfo=None, contCmd=None):
        create_container(contCmd, contName, imageInfo, bindOpt, args)
        write_dockerSetup(args.shellFilename, args.tags, contCmd, contName, imageInfo, bindOpt, args.force)
 
-    sleep(1)
+    # sleep(1)
 
 
 def jupyter(args):
