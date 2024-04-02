@@ -505,7 +505,7 @@ elif [[ "$listOut" =~ $re_up ]]; then
       eval $unpauseCmd >/dev/null
    fi
 else
-   createCmd="$contCmd create -it -v $PWD:$PWD -w $PWD $jupyterOpt --name $contName $dockerPath"
+   createCmd="$contCmd create -it -v $PWD:$PWD -w $PWD $runOpt $jupyterOpt --name $contName $dockerPath"
    echo -e "\\n$createCmd"
    eval $createCmd >/dev/null
    startCmd="$contCmd start $contName"
@@ -634,9 +634,10 @@ def setup(args):
        pwd = os.getcwd()
        home = os.path.expanduser("~")
        for path in paths.split(','):
-           if os.path.samefile(pwd, path):
+           localPath = path.split(':')[0]
+           if os.path.samefile(pwd, localPath):
               continue
-           elif (contCmd == "singularity" or contCmd == "apptainer")and os.path.samefile(home, path):
+           elif (contCmd == "singularity" or contCmd == "apptainer")and os.path.samefile(home, localPath):
               continue 
            volumes += [path]
 
