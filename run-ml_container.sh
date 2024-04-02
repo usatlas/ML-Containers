@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-03-06-r01
+# version=2024-04-02-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -49,6 +49,7 @@ fi
 import getpass
 import os
 import sys
+import io
 from datetime import datetime, timezone
 from time import sleep
 
@@ -62,36 +63,47 @@ import subprocess
 from shutil import which, rmtree
 from subprocess import getstatusoutput
 from urllib.request import urlopen, Request
+from urllib.error import URLError, HTTPError
 import ssl
 
 
-GITHUB_REPO="usatlas/ML-Containers"
-GITHUB_PATH="run-ml_container.sh"
+GITHUB_REPO = "usatlas/ML-Containers"
+GITHUB_PATH = "run-ml_container.sh"
 URL_SELF = "https://raw.githubusercontent.com/%s/main/%s" % (GITHUB_REPO, GITHUB_PATH)
 URL_API_SELF = "https://api.github.com/repos/%s/commits?path=%s&per_page=100" % (GITHUB_REPO, GITHUB_PATH)
-CONTAINER_CMDS = ['podman', 'docker', 'singularity']
+CONTAINER_CMDS = ['podman', 'docker', 'nerdctl', 'apptainer', 'singularity']
 DOCKERHUB_REPO = "https://hub.docker.com/v2/repositories/"
 IMAGE_CENTOS7_PY38 = {
         "dockerPath": "docker.io/yesw2000/{FullName}",
-              "listURL":"https://raw.githubusercontent.com/usatlas/ML-Containers/main/centos7/{Name}/python38/list-of-pkgs-inside.txt",
+              "listURL": "https://raw.githubusercontent.com/usatlas/ML-Containers/main/centos7/{Name}/python38/list-of-pkgs-inside.txt",
               "cvmfsPath": ["/cvmfs/atlas.sdcc.bnl.gov/users/yesw/singularity/centos7-py38/{Name}",
                             "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/{FullName}"]
 }
 IMAGE_CENTOS7_PY39 = {
         "dockerPath": "docker.io/yesw2000/{FullName}",
-              "listURL":"https://raw.githubusercontent.com/usatlas/ML-Containers/main/centos7/{Name}/python39/list-of-pkgs-inside.txt",
+              "listURL": "https://raw.githubusercontent.com/usatlas/ML-Containers/main/centos7/{Name}/python39/list-of-pkgs-inside.txt",
               "cvmfsPath": ["/cvmfs/atlas.sdcc.bnl.gov/users/yesw/singularity/centos7-py39/{Name}",
                             "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/{FullName}"]
 }
+IMAGE_ALMA9_PY39 = {
+        "dockerPath": "docker.io/yesw2000/{FullName}",
+              "listURL": "https://raw.githubusercontent.com/usatlas/ML-Containers/main/alma9/{Name}/python39/list-of-pkgs-inside.txt",
+              "cvmfsPath": ["/cvmfs/atlas.sdcc.bnl.gov/users/yesw/singularity/alma9-py39/{Name}",
+                            "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/{FullName}"]
+}
 IMAGE_CONFIG = {
-    "ml-base:centos7-python38":IMAGE_CENTOS7_PY38,
-    "ml-pyroot:centos7-python38":IMAGE_CENTOS7_PY38,
-    "ml-tensorflow-cpu:centos7-python38":IMAGE_CENTOS7_PY38,
-    "ml-tensorflow-gpu:centos7-python38":IMAGE_CENTOS7_PY38,
-    "ml-base:centos7-python39":IMAGE_CENTOS7_PY39,
-    "ml-pyroot:centos7-python39":IMAGE_CENTOS7_PY39,
-    "ml-tensorflow-cpu:centos7-python39":IMAGE_CENTOS7_PY39,
-    "ml-tensorflow-gpu:centos7-python39":IMAGE_CENTOS7_PY39,
+    "ml-base:centos7-python38": IMAGE_CENTOS7_PY38,
+    "ml-pyroot:centos7-python38": IMAGE_CENTOS7_PY38,
+    "ml-tensorflow-cpu:centos7-python38": IMAGE_CENTOS7_PY38,
+    "ml-tensorflow-gpu:centos7-python38": IMAGE_CENTOS7_PY38,
+    "ml-base:centos7-python39": IMAGE_CENTOS7_PY39,
+    "ml-pyroot:centos7-python39": IMAGE_CENTOS7_PY39,
+    "ml-tensorflow-cpu:centos7-python39": IMAGE_CENTOS7_PY39,
+    "ml-tensorflow-gpu:centos7-python39": IMAGE_CENTOS7_PY39,
+    "ml-base:alma9-python39": IMAGE_ALMA9_PY39,
+    "ml-pyroot:alma9-python39": IMAGE_ALMA9_PY39,
+    "ml-tensorflow-cpu:alma9-python39": IMAGE_ALMA9_PY39,
+    "ml-tensorflow-gpu:alma9-python39": IMAGE_ALMA9_PY39,
 }
 
 
@@ -124,7 +136,8 @@ def set_default_subparser(parser, default_subparser, index_action=1):
 def getUrlContent(url):
     try:
        response = urlopen(url)
-    except:
+    except (URLError, HTTPError) as e:
+       print("Error fetching URL:", e)
        ssl_context = ssl._create_unverified_context()
        response = urlopen(url, context=ssl_context)
     return response.read().decode('utf-8')
@@ -140,11 +153,9 @@ def getLastCommit():
 
 
 def getVersion(myFile=None):
-    isFileOpen = False
     if myFile is None:
        myScript =  os.path.abspath(sys.argv[0])
        myFile = open(myScript, 'r')
-       isFileOpen = True
     else:
        if isinstance(myFile, str):
           myFile = myFile.split('\n')
@@ -159,7 +170,7 @@ def getVersion(myFile=None):
            version = line.split('=')[1]
            break
 
-    if isFileOpen:
+    if isinstance(myFile, io.IOBase):
        myFile.close()
 
     return version
@@ -170,7 +181,8 @@ def selfUpdate(args):
     myDate, recentCommit = getLastCommit()
     print("The most recent GitHub commit's UTC timestamp is", recentCommit)
 
-    latestVersion = getVersion(getUrlContent(URL_SELF))
+    content = getUrlContent(URL_SELF)
+    latestVersion = getVersion(content)
     if latestVersion > currentVersion or (latestVersion == currentVersion and recentCommit > myDate):
        print("Update available, updating the script itself")
        myScript =  os.path.abspath(sys.argv[0])
@@ -265,7 +277,7 @@ def getImageInfo(args, imageFullName=None, printOut=True):
     else:
        print("!!Warning!! No tag name=%s is found for the image name=%s" % (tagName, imageName) )
        sys.exit(1)
-    
+
 
 def listPackages(args):
     images_found = list_FoundImages(args.name)
@@ -285,13 +297,13 @@ def listPackages(args):
        url = IMAGE_CONFIG[imageName]["listURL"].replace("{Name}",baseName)
        try:
           print(getUrlContent(url))
-       except:
+       except Exception:
           print("Failed in opening the following URL", url)
           sys.exit(1)
 
 def listNewPkgs(contCmd, contNamePath, lastLineN):
     history = "/opt/conda/conda-meta/history"
-    if contCmd == 'singularity':
+    if contCmd == 'singularity' or contCmd == 'apptainer':
        grepCmd = 'egrep -n "specs:|cmd:" %s/%s' % (contNamePath, history)
     else:
        startCmd = '%s start %s' % (contCmd, contNamePath)
@@ -341,7 +353,7 @@ def listNewPkgs(contCmd, contNamePath, lastLineN):
                elif item.startswith("--channel="):
                   value = item.split('=')[1]
                   if value not in channels and value != 'conda-forge':
-                     channels += [ value ]
+                     channels += [value]
 
     pkgs_list = []
     for k, v in pkgs.items():
@@ -357,9 +369,9 @@ def install_newPkgs(contCmd, contNamePath, pkgs, channels):
     for pkg in pkgs:
         channels_pkgs += ' ' + pkg
     bash_cmd = "/bin/bash -c 'micromamba install -y %s'" % channels_pkgs
-    if contCmd == 'singularity':
-       installCmd = "singularity exec -w -H %s %s %s" \
-                    % (os.getcwd(), contNamePath, bash_cmd)
+    if contCmd == 'singularity' or contCmd == 'apptainer':
+       installCmd = "%s exec -w -H %s %s %s" \
+                    % (contCmd, os.getcwd(), contNamePath, bash_cmd)
     else:
        installCmd = "%s exec %s %s" % (contCmd, contNamePath, bash_cmd)
     print("\nGoing to install new pkg(s) with the following command\n")
@@ -368,7 +380,7 @@ def install_newPkgs(contCmd, contNamePath, pkgs, channels):
 
 
 # build Singularity sandbox
-def build_sandbox(sandboxPath, dockerPath, force=False):
+def build_sandbox(contCmd, sandboxPath, dockerPath, force=False):
     if os.path.exists(sandboxPath):
        if not force and os.path.exists(sandboxPath + "/entrypoint.sh"):
           print("%s already, and would not override it." % sandboxPath)
@@ -376,7 +388,7 @@ def build_sandbox(sandboxPath, dockerPath, force=False):
           print("Quit now")
           sys.exit(1)
        os.system("chmod -R +w %s; rm -rf %s" % (sandboxPath, sandboxPath) )
-    buildCmd = "singularity build --sandbox --fix-perms -F %s docker://%s" % (sandboxPath, dockerPath)
+    buildCmd = "%s build --sandbox --fix-perms -F %s docker://%s" % (contCmd, sandboxPath, dockerPath)
     print("\nBuilding Singularity sandbox\n")
     retCode = subprocess.call(buildCmd.split())
     if retCode != 0:
@@ -385,7 +397,7 @@ def build_sandbox(sandboxPath, dockerPath, force=False):
 
 
 # write setup for Singularity sandbox
-def write_sandboxSetup(filename, imageName, dockerPath, sandboxPath, runOpt):
+def write_sandboxSetup(filename, imageName, dockerPath, contCmd, sandboxPath, runOpt):
     imageInfo = getImageInfo(None, imageName, printOut=False)
     imageSize = imageInfo["imageSize"]
     lastUpdate = imageInfo["lastUpdate"]
@@ -395,7 +407,7 @@ def write_sandboxSetup(filename, imageName, dockerPath, sandboxPath, runOpt):
     myScript =  os.path.abspath(sys.argv[0])
     shellFile = open(filename, 'w')
     shellFile.write("""
-contCmd=singularity
+contCmd=%s
 imageName=%s
 imageCompressedSize=%s
 imageLastUpdate=%s
@@ -406,9 +418,9 @@ sandboxPath=%s
 runOpt="%s"
 if [ -e $sandboxPath/entrypoint.sh ]; then
    if [[ $# -eq 1 && "$1" =~ ^[Jj]upyter$ ]]; then
-      runCmd="singularity exec $runOpt $sandboxPath jupyter lab"
+      runCmd="$contCmd exec $runOpt $sandboxPath jupyter lab"
    else
-      runCmd="singularity run $runOpt $sandboxPath"
+      runCmd="$contCmd run $runOpt $sandboxPath"
    fi
    echo -e "\\n$runCmd\\n"
    eval $runCmd
@@ -417,7 +429,7 @@ else
    echo "Please rebuild the Singularity sandbox by running the following"
    echo -e "\n\t source %s $imageName"
 fi
-""" % (imageName, imageSize, lastUpdate, imageDigest, linesCondaHistory, 
+""" % (contCmd, imageName, imageSize, lastUpdate, imageDigest, linesCondaHistory, 
        dockerPath, sandboxPath, runOpt, myScript) )
     shellFile.close()
 
@@ -428,7 +440,7 @@ def create_container(contCmd, contName, dockerPath, bindOpt, force=False):
     retCode = subprocess.call(pullCmd.split())
     username = getpass.getuser()
     home = os.path.expanduser("~")
-    jupyterOpt = "-p 8888:8888 -e NB_USER=%s -e HOME=%s -v %s:%s" % (username, home, home, home)
+    jupyterOpt = "-p 8800:8800 -e NB_USER=%s -e HOME=%s -v %s:%s" % (username, home, home, home)
     jupyterOpt += " -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro"
     if retCode != 0:
        print("!!Warning!! Pulling the image %s failed, exit now" % dockerPath)
@@ -461,9 +473,8 @@ def write_dockerSetup(filename, imageName, dockerPath, contCmd, contName, bindOp
     lastUpdate = imageInfo["lastUpdate"]
     imageDigest = imageInfo["imageDigest"]
 
-    output = run_shellCmd("%s run --rm %s wc -l /opt/conda/conda-meta/history" % (contCmd, dockerPath) )
+    output = run_shellCmd("%s run --rm %s wc -l /opt/conda/conda-meta/history |tail -1" % (contCmd, dockerPath) )
     linesCondaHistory = output.split()[0]
-      
 
     shellFile = open(filename, 'w')
     shellFile.write("""
@@ -476,12 +487,12 @@ dockerPath=%s
 linesCondaHistory=%s
 contName=%s
 runOpt="%s"
-jupyterOpt="-p 8888:8888 -e NB_USER=$USER -e HOME=$HOME -v ${HOME}:${HOME}"
+jupyterOpt="-p 8800:8800 -e NB_USER=$USER -e HOME=$HOME -v ${HOME}:${HOME}"
 jupyterOpt="$jupyterOpt -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro"
 re_exited="ago[\ ]+Exited"
 re_up="ago[\ ]+Up"
 
-listOut=$($contCmd ps -a -f name='^'$contName'$' 2>/dev/null | tail -1)
+listOut=$($contCmd ps -a -f name=$contName 2>/dev/null | tail -1)
 
 if [[ "$listOut" =~ $re_exited ]]; then
    startCmd="$contCmd start $contName"
@@ -539,7 +550,7 @@ def printMe(args):
     pp = pprint.PrettyPrinter(indent=4)
     print("The image/container used in the current work directory:")
     pp.pprint(myImageInfo)
-    if contCmd == 'singularity':
+    if contCmd == 'singularity' or contCmd == 'apptainer':
        contNamePath = myImageInfo["sandboxPath"]
     else:
        contNamePath = myImageInfo["contName"]
@@ -564,8 +575,9 @@ def cleanLast(filename):
           print("\nRemoving the last sandbox=%s\n" % sandboxPath)
           try:
              rmtree(sandboxPath)
-          except:
-             pass
+          except (OSError, IOError, PermissionError) as e:
+             print("Error removing directory of last sandbox:", e)
+             sys.exit(1)
           os.rename(filename, filename + '.last')
        else:
           contName = myImageInfo['contName']
@@ -612,7 +624,7 @@ def setup(args):
           print("The specified command=%s to run containers is NOT found" % args.contCmd)
           print("Please choose the available command(s) on the machine to run containers")
           print("\t",contCmds)
-          sys,exit(1)
+          sys.exit(1)
 
     cleanLast(args.shellFilename)
 
@@ -624,18 +636,18 @@ def setup(args):
        for path in paths.split(','):
            if os.path.samefile(pwd, path):
               continue
-           elif contCmd == "singularity" and os.path.samefile(home, path):
+           elif (contCmd == "singularity" or contCmd == "apptainer")and os.path.samefile(home, path):
               continue 
            volumes += [path]
 
-    if contCmd == "singularity":
+    if contCmd == "singularity" or contCmd == "apptainer":
        if not os.path.exists("singularity"):
           os.mkdir("singularity")
        sandboxPath = "singularity/%s" % imageFullName
-       build_sandbox(sandboxPath, dockerPath, args.force)
+       build_sandbox(contCmd, sandboxPath, dockerPath, args.force)
 
        imageFullPath = os.path.join(os.getcwd(), sandboxPath)
-       runCmd = "singularity run -w %s" % imageFullPath
+       runCmd = "%s run -w %s" % (contCmd, imageFullPath)
        runOpt = '-w'
 
        for path in volumes:
@@ -647,9 +659,9 @@ def setup(args):
        retCode, out = getstatusoutput(testCmd)
        if retCode != 0:
           runOpt = '-w -H $PWD'
-       write_sandboxSetup(args.shellFilename, imageFullName, dockerPath, sandboxPath, runOpt)
+       write_sandboxSetup(args.shellFilename, imageFullName, dockerPath, contCmd, sandboxPath, runOpt)
 
-    elif contCmd == "podman" or contCmd == "docker":
+    elif contCmd == "podman" or contCmd == "docker" or contCmd == "nerdctl":
        testCmd = "%s info" % contCmd
        run_shellCmd(testCmd)
        contName = '_'.join([getpass.getuser(), imageName, tagName])
@@ -695,16 +707,16 @@ def update(args):
     linesCondaHistory = myImageInfo.pop("linesCondaHistory")
     dockerPath = myImageInfo['dockerPath']
 
-    if contCmd == 'singularity':
+    if contCmd == 'singularity' or contCmd == 'apptainer':
        contNamePath = myImageInfo["sandboxPath"]
     else:
        contNamePath = myImageInfo["contName"]
     pkgs, channels = listNewPkgs(contCmd, contNamePath, linesCondaHistory)
 
-    if contCmd == 'singularity':
+    if contCmd == 'singularity' or contCmd == 'apptainer':
        build_sandbox(contNamePath, dockerPath, force=True)
        write_sandboxSetup(args.shellFilename, myImageName, dockerPath, \
-                                 contNamePath, runOpt)
+                                 contCmd, contNamePath, runOpt)
     else:
        create_container(contCmd, contNamePath, dockerPath, runOpt, force=True)
        write_dockerSetup(args.shellFilename, myImageName, dockerPath, \
