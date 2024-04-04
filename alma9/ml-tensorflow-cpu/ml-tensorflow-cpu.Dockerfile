@@ -134,6 +134,7 @@ RUN  chmod +x /tmp/gtar-newEnv-on-base.sh \
 #
 COPY setupMe-on-host.sh test-tensorflow-with-cpu.py create-newEnv-on-base.sh setup-UserEnv-in-container.sh create-py_newEnv-on-base.sh /
 COPY printme.sh /printme.sh
+RUN echo "source /printme.sh" >> ~/.bashrc
 
 # Singularity
 # RUN mkdir -p /.singularity.d/env \

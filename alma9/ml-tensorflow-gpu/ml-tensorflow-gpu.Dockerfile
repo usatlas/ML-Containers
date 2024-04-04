@@ -145,7 +145,11 @@ RUN  chmod +x /tmp/gtar-newEnv-on-base.sh \
 # copy setup script and readme file
 #
 COPY setupMe-on-host.sh check-gpu-in-tensorflow.py create-newEnv-on-base.sh setup-UserEnv-in-container.sh create-py_newEnv-on-base.sh /
-COPY printme-gpu.sh /printme.sh
+#
+# The the package cuda-compat, has already included libcuda.so, so printme-gpu.sh is not longer correct.
+# COPY printme-gpu.sh /printme.sh
+COPY printme.sh /printme.sh
+RUN echo "source /printme.sh" >> ~/.bashrc
 
 # Singularity
 # RUN mkdir -p /.singularity.d/env \
