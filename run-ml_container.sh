@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-04-02-r02
+# version=2024-04-04-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -71,7 +71,7 @@ GITHUB_REPO = "usatlas/ML-Containers"
 GITHUB_PATH = "run-ml_container.sh"
 URL_SELF = "https://raw.githubusercontent.com/%s/main/%s" % (GITHUB_REPO, GITHUB_PATH)
 URL_API_SELF = "https://api.github.com/repos/%s/commits?path=%s&per_page=100" % (GITHUB_REPO, GITHUB_PATH)
-CONTAINER_CMDS = ['podman', 'docker', 'nerdctl', 'apptainer', 'singularity']
+CONTAINER_CMDS = ["podman", "docker", "nerdctl", "apptainer", "singularity"]
 DOCKERHUB_REPO = "https://hub.docker.com/v2/repositories/"
 IMAGE_CENTOS7_PY38 = {
         "dockerPath": "docker.io/yesw2000/{FullName}",
@@ -133,6 +133,13 @@ def set_default_subparser(parser, default_subparser, index_action=1):
             sys.argv.insert(index_action, default_subparser) 
 
 
+def listGPUDevices():
+    import os
+    dev_files = os.listdir('/dev')
+    nvidia_devices = ['/dev/'+f for f in dev_files if f.startswith('nvidia')]
+    return nvidia_devices
+
+
 def getUrlContent(url):
     try:
        response = urlopen(url)
@@ -141,6 +148,16 @@ def getUrlContent(url):
        ssl_context = ssl._create_unverified_context()
        response = urlopen(url, context=ssl_context)
     return response.read().decode('utf-8')
+
+
+def getUrlHeaders(url):
+    try:
+       response = urlopen(url)
+    except (URLError, HTTPError) as e:
+       print("Error fetching URL:", e)
+       ssl_context = ssl._create_unverified_context()
+       response = urlopen(url, context=ssl_context)
+    return response.headers
 
 
 def getLastCommit():
@@ -456,8 +473,15 @@ def create_container(contCmd, contName, dockerPath, bindOpt, force=False):
           print("\nQuit now")
           sys.exit(1)
 
+    secOpt = ""
+    if contCmd == "podman":
+       lsCmd = "%s run -it --rm %s ls / | tail -1" % (contCmd, dockerPath)
+       out = run_shellCmd(lsCmd, exitOnFailure=False)
+       if out.find("Operation not permitted") >= 0:
+          secOpt = "--security-opt seccomp=unconfined"
+
     pwd = os.getcwd()
-    createOpt = "-it -v %s:%s -w %s %s %s" % (pwd, pwd, pwd, jupyterOpt, bindOpt)
+    createOpt = "-it -v %s:%s -w %s %s %s %s" % (pwd, pwd, pwd, jupyterOpt, bindOpt, secOpt)
     createCmd = "%s create %s --name %s %s" % \
                 (contCmd, createOpt, contName, dockerPath)
     out = run_shellCmd(createCmd)
@@ -465,9 +489,11 @@ def create_container(contCmd, contName, dockerPath, bindOpt, force=False):
     startCmd = "%s start %s" % (contCmd, contName)
     out = run_shellCmd(startCmd)
 
+    return secOpt
+
 
 # write setup for Docker/Podman container
-def write_dockerSetup(filename, imageName, dockerPath, contCmd, contName, bindOpt, override=False):
+def write_dockerSetup(filename, imageName, dockerPath, contCmd, contName, runOpt, override=False):
     imageInfo = getImageInfo(None, imageName, printOut=False)
     imageSize = imageInfo["imageSize"]
     lastUpdate = imageInfo["lastUpdate"]
@@ -524,7 +550,7 @@ fi
 echo -e "\\n$runCmd\\n"
 eval $runCmd
 """ % (contCmd, imageName, imageSize, lastUpdate, imageDigest, 
-       dockerPath, linesCondaHistory, contName, bindOpt) )
+       dockerPath, linesCondaHistory, contName, runOpt) )
     shellFile.close()
 
 
@@ -533,7 +559,7 @@ def getMyImageInfo(filename):
     myImageInfo = {}
     for line in shellFile:
        if re.search(r'^(cont|image|docker|sand|runOpt|lines).*=', line):
-          key, value = line.strip().split('=')
+          key, value = line.strip().split('=', 1)
           myImageInfo[key] = value
     return myImageInfo
 
@@ -612,7 +638,7 @@ def setup(args):
            contCmds += [cmd]
 
     if len(contCmds) == 0:
-       print("None of container running commands: docker, podman, singularity; exit now")
+       print("Found none of container running commands:", CONTAINER_CMDS, "; exit now")
        print("Please install one of the above tool first")
        sys.exit(1)
 
@@ -637,7 +663,7 @@ def setup(args):
            localPath = path.split(':')[0]
            if os.path.samefile(pwd, localPath):
               continue
-           elif (contCmd == "singularity" or contCmd == "apptainer")and os.path.samefile(home, localPath):
+           elif (contCmd == "singularity" or contCmd == "apptainer") and os.path.samefile(home, localPath):
               continue 
            volumes += [path]
 
@@ -649,17 +675,21 @@ def setup(args):
 
        imageFullPath = os.path.join(os.getcwd(), sandboxPath)
        runCmd = "%s run -w %s" % (contCmd, imageFullPath)
-       runOpt = '-w'
-
-       for path in volumes:
-           runOpt += " -B %s" % path
-
        # Check if Home bind-mount works with --writable mode
        # if not, add the option --no-home
        testCmd = runCmd + " ls /dev/null >/dev/null 2>&1"
        retCode, out = getstatusoutput(testCmd)
        if retCode != 0:
           runOpt = '-w -H $PWD'
+       else:
+          runOpt = '-w'
+
+       if imageName.find('gpu') >= 0 and len(listGPUDevices()) > 0:
+          runOpt += ' --nv'
+
+       for path in volumes:
+           runOpt += " -B %s" % path
+
        write_sandboxSetup(args.shellFilename, imageFullName, dockerPath, contCmd, sandboxPath, runOpt)
 
     elif contCmd == "podman" or contCmd == "docker" or contCmd == "nerdctl":
@@ -668,15 +698,24 @@ def setup(args):
        contName = '_'.join([getpass.getuser(), imageName, tagName])
 
        bindOpt = ''
+       if imageName.find('gpu') >= 0:
+          devices = listGPUDevices()
+          if len(devices) > 0:
+             if contCmd == "podman":
+                bindOpt = '--device=' + ','.join(devices)
+             else:
+                bindOpt = '--gpus all'
+
        for path in volumes:
            if path.find(':') > 0:
               bindOpt += " -v %s" % path
            else:
               bindOpt += " -v %s:%s" % (path, path)
 
-       create_container(contCmd, contName, dockerPath, bindOpt, args.force)
+       secOpt = create_container(contCmd, contName, dockerPath, bindOpt, args.force)
+       runOpt = bindOpt + ' ' + secOpt
        write_dockerSetup(args.shellFilename, imageFullName, dockerPath, 
-                         contCmd, contName, bindOpt, args.force)
+                         contCmd, contName, runOpt, args.force)
 
     sleep(1)
 
@@ -734,23 +773,58 @@ def jupyter(args):
        return None
 
 
+# Get a DockerHub token for a given scrope and username
+def get_docker_hub_token(repo, username=None):
+    """
+    Get a Docker Hub token. If username is given, authenticate with that username.
+    """
+    url_token = "https://auth.docker.io/token?service=registry.docker.io&scope=repository:" + repo + ":pull"
+    json_obj = json.loads(getUrlContent(url_token))
+    token = json_obj["token"]
+    return token
+
+
+def getPullLimitInfo(args):
+    """
+    Get the pull limit information for anonymous user or a given username
+    """
+    username = args.username
+    repo = "ratelimitpreview/test"
+    token = get_docker_hub_token(repo, username)
+    url_digest = "https://registry-1.docker.io/v2/" + repo + "/manifests/latest"
+    req =  Request(url_digest, method="HEAD")
+    # req.add_header('Accept', 'application/vnd.oci.image.manifest.v1+json')
+    req.add_header('Authorization', 'Bearer %s' % token)
+    headers = getUrlHeaders(req)
+
+    limit_info = {
+        "ratelimit-limit": headers.get("ratelimit-limit"),
+        "ratelimit-remaining": headers.get("ratelimit-remaining"),
+        "docker-ratelimit-source": headers.get("docker-ratelimit-source"),
+    }
+    remaining = limit_info["ratelimit-remaining"]
+    period_seconds = int(remaining.split('=')[-1])
+    period_hours = period_seconds/3600
+    limit_remaining = int(remaining.split(';')[0])
+    print("The pull limit info on the Docker Hub is:")
+    print("    The remaining pull limit=%i per %i hours" % (limit_remaining, period_hours) )
+
+
 # Get labels in a Docker image
 def getImageLabels(imageName, tag):
 
     if imageName.find('/') < 0:
-       imageName = 'yesw2000/' + imageName
-    url_token = "https://auth.docker.io/token?scope=repository:%s:pull&service=registry.docker.io" % imageName
-    json_obj = json.loads(getUrlContent(url_token))
-    token = json_obj["token"]
+       repo = 'yesw2000/' + imageName
+    token = get_docker_hub_token(repo)
 
-    url_digest = "https://registry-1.docker.io/v2/%s/manifests/%s" % (imageName, tag)
+    url_digest = "https://registry-1.docker.io/v2/%s/manifests/%s" % (repo, tag)
     req =  Request(url_digest)
     req.add_header('Accept', 'application/vnd.oci.image.manifest.v1+json')
     req.add_header('Authorization', 'Bearer %s' % token)
     json_obj = json.loads(getUrlContent(req))
     digest = json_obj['config']['digest']
 
-    url_inspect = "https://registry-1.docker.io/v2/%s/blobs/%s" % (imageName, digest)
+    url_inspect = "https://registry-1.docker.io/v2/%s/blobs/%s" % (repo, digest)
     req =  Request(url_inspect)
     req.add_header('Accept', 'application/vnd.oci.image.manifest.v1+json')
     req.add_header('Authorization', 'Bearer %s' % token)
@@ -794,6 +868,11 @@ def main():
     sp_printImageInfo = sp.add_parser('printImageInfo', help='print Image Info', description='print out image size. last update date and SHA256 hash of the given image')
     sp_printImageInfo.add_argument('name', metavar='<ImageName>')
     sp_printImageInfo.set_defaults(func=getImageInfo)
+
+    sp_printPullLimitInfo = sp.add_parser('printPullLimitInfo', help='print the pull limit info', 
+                        description='print out the pull limit info on the Docker Hub, for anonymous or a given user')
+    sp_printPullLimitInfo.add_argument('username', nargs='?', metavar='<UserName>', help="A DockerHub name, otherwise anonymous user will be applied")
+    sp_printPullLimitInfo.set_defaults(func=getPullLimitInfo)
 
     sp_printMe = sp.add_parser('printMe', help='print info of the setup container', description='print the container/sandbox set up for the work directory')
     sp_printMe.set_defaults(func=printMe)
