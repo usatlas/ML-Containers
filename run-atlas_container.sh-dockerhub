@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-04-09-r01
+# version=2024-04-09-r02
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -243,6 +243,7 @@ def selfUpdate(args):
     myDate, recentCommit = getLastCommit()
     print("The most recent GitHub commit's UTC timestamp is", recentCommit)
 
+    content = getUrlContent(URL_SELF)
     latestVersion = getVersion(getUrlContent(URL_SELF))
     if latestVersion > currentVersion or (
             latestVersion == currentVersion and recentCommit > myDate):
