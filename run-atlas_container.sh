@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-04-09-r01
+# version=2024-04-11-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -15,7 +15,7 @@ fi
 
 mySetup=runMe-here.sh
 
-if [[ -e $mySetup && ( $# -eq 0 || "$@" =~ "--rerun" ) ]]; then
+if [[ -e $mySetup && ( $# -eq 0 || "$*" =~ "--rerun" ) ]]; then
    source $mySetup
    ret=$?
 elif [[ $# -eq 1 && "$1" =~ ^[Jj]upyter$ ]]; then
@@ -57,6 +57,7 @@ fi
 import getpass
 import os
 import sys
+import io
 from datetime import datetime, timezone
 # from time import sleep
 
@@ -72,6 +73,7 @@ import difflib
 from shutil import which, rmtree
 from subprocess import getstatusoutput
 from urllib.request import urlopen
+from urllib.error import URLError, HTTPError
 import ssl
 
 GITHUB_REPO = "usatlas/ML-Containers"
@@ -80,7 +82,7 @@ URL_SELF = "https://raw.githubusercontent.com/%s/main/%s" % (
     GITHUB_REPO, GITHUB_PATH)
 URL_API_SELF = "https://api.github.com/repos/%s/commits?path=%s&per_page=100" % (
     GITHUB_REPO, GITHUB_PATH)
-CONTAINER_CMDS = ['docker', 'podman', 'singularity']
+CONTAINER_CMDS = ["podman", "docker", "nerdctl", "apptainer", "singularity"]
 ContCmds_available = []
 
 URL_GITLAB = "https://gitlab.cern.ch/api/v4/projects"
@@ -120,8 +122,8 @@ class Version(str):
 
     def __lt__(self, other):
 
-        va = re.split(r'[.-]', self)
-        vb = re.split(r'[.-]', other)
+        va = re.split(r"[.-]", self)
+        vb = re.split(r"[.-]", other)
 
         # print("va=",va, "; vb=",vb)
 
@@ -149,9 +151,8 @@ def set_default_subparser(parser, default_subparser, index_action=1):
 
     subparser_found = False
     for arg in sys.argv[1:]:
-        if arg in [
-            '-h', '--help',
-            '-V', '--version']:  # global help or version, no default subparser
+        if arg in ["-h", "--help",
+                   "-V", "--version"]:  # global help or version, no default subparser
             break
     else:
         for x in parser._subparsers._actions:
@@ -168,31 +169,30 @@ def set_default_subparser(parser, default_subparser, index_action=1):
 def getUrlContent(url):
     try:
         response = urlopen(url)
-    except BaseException:
+    except (URLError, HTTPError) as e:
+        print("Error fetching URL:", e)
         ssl_context = ssl._create_unverified_context()
         response = urlopen(url, context=ssl_context)
-    return response.read().decode('utf-8')
+    return response.read().decode("utf-8")
 
 
 def getLastCommit():
     json_obj = json.loads(getUrlContent(URL_API_SELF))
-    recentCommit = json_obj[0]['commit']['committer']['date']
+    recentCommit = json_obj[0]["commit"]["committer"]["date"]
     myScript = os.path.abspath(sys.argv[0])
     myMTime = datetime.fromtimestamp(
         os.path.getmtime(myScript), tz=timezone.utc)
-    myDate = myMTime.strftime('%Y-%m-%dT%H:%M:%SZ')
+    myDate = myMTime.strftime("%Y-%m-%dT%H:%M:%SZ")
     return myDate, recentCommit
 
 
 def getVersion(myFile=None):
-    isFileOpen = False
     if myFile is None:
         myScript = os.path.abspath(sys.argv[0])
-        myFile = open(myScript, 'r')
-        isFileOpen = True
+        myFile = open(myScript, "r")
     else:
         if isinstance(myFile, str):
-            myFile = myFile.split('\n')
+            myFile = myFile.split("\n")
 
     no = 0
     version = ""
@@ -200,11 +200,11 @@ def getVersion(myFile=None):
         no += 1
         if no > 10:
             break
-        if re.search(r'^#.* version', line):
-            version = line.split('=')[1]
+        if re.search(r"^#.* version", line):
+            version = line.split("=")[1]
             break
 
-    if isFileOpen:
+    if isinstance(myFile, io.IOBase):
         myFile.close()
 
     return version
@@ -214,28 +214,27 @@ def parseArgTags(inputArgs, requireRelease=False):
     argTags = []
     releaseTags = {}
     for arg in inputArgs:
-        argTags += re.split(r'[,:]', arg)
+        argTags += re.split(r"[,:]", arg)
     for tag in argTags:
         if len(tag) == 0:
             continue
         if tag.lower() in ATLAS_PROJECTS:
-            releaseTags['project'] = tag.lower()
-        # elif tag == 'latest' or tag[0].isdigit():
+            releaseTags["project"] = tag.lower()
+        # elif tag == "latest" or tag[0].isdigit():
         else:
-            if 'releases' not in releaseTags:
-                releaseTags['releases'] = [tag]
+            if "releases" not in releaseTags:
+                releaseTags["releases"] = [tag]
             else:
-                releaseTags['releases'] += [tag]
+                releaseTags["releases"] += [tag]
             # print("!!Warning!! Unrecognized input arg=", tag)
 
-    if 'project' not in releaseTags:
+    if "project" not in releaseTags:
         print("The input arg tags=", argTags)
-        print(
-            "!!Warning!! No project is given from the available choices:",
-            ATLAS_PROJECTS)
+        print("!!Warning!! No project is given from the available choices:",
+              ATLAS_PROJECTS)
         for argTag in argTags:
             closeProject = None
-            argTag_1 = re.split(r'[-.=;]', argTag, 1)[0].lower()
+            argTag_1 = re.split(r"[-.=;]", argTag, 1)[0].lower()
             if argTag_1 in ATLAS_PROJECTS:
                 closeProject = argTag_1
             if not closeProject:
@@ -253,7 +252,7 @@ def parseArgTags(inputArgs, requireRelease=False):
                 break
         sys.exit(1)
 
-    if requireRelease and 'releases' not in releaseTags:
+    if requireRelease and "releases" not in releaseTags:
         print("!!Warning!! No release is given")
         sys.exit(1)
 
@@ -271,9 +270,9 @@ def selfUpdate(args):
             latestVersion == currentVersion and recentCommit > myDate):
         print("Update available, updating the script itself")
         myScript = os.path.abspath(sys.argv[0])
-        os.rename(myScript, myScript + '.old')
+        os.rename(myScript, myScript + ".old")
         try:
-            myfile = open(myScript, 'w')
+            myfile = open(myScript, "w")
             myfile.write(content)
             myfile.close()
             print("Update finished")
@@ -281,7 +280,7 @@ def selfUpdate(args):
             err = sys.exc_info()[1]
             print("Failed to write out the latest version of this script\n", err)
             print("Keep the current version")
-            os.rename(myScript + '.old', myScript)
+            os.rename(myScript + ".old", myScript)
         return
 
     print("Already up-to-date, no update needed")
@@ -302,13 +301,13 @@ def listImageTags(project):
     repoID = None
     json_tags = {}
     for repo in json_obj:
-        if repo["name"] == project or repo["path"].endswith('/' + project):
+        if repo["name"] == project or repo["path"].endswith("/" + project):
             json_tags = repo["tags"]
             repoID = repo["id"]
             break
     imageTags = []
     for tagObj in json_tags:
-        imageTags += [tagObj['name']]
+        imageTags += [tagObj["name"]]
 
     return imageTags, repoID
 
@@ -316,15 +315,14 @@ def listImageTags(project):
 def listReleases(args):
     inputTags = args.tags
     if len(inputTags) == 0:
-        print(
-            "Please specify a project name. The available projects are:\n\n",
-            ATLAS_PROJECTS)
+        print("Please specify a project name. The available projects are:\n\n",
+              ATLAS_PROJECTS)
         sys.exit(1)
 
     releaseTags = parseArgTags(inputTags, requireRelease=False)
-    project = releaseTags['project']
-    if 'releases' in releaseTags:
-        releases = releaseTags['releases']
+    project = releaseTags["project"]
+    if "releases" in releaseTags:
+        releases = releaseTags["releases"]
     else:
         releases = None
     imageTags, _ = listImageTags(project)
@@ -336,7 +334,7 @@ def listReleases(args):
         releasesWild = []
         releasesNoWild = []
         for release in releases:
-            if '*' in release or '?' in release:
+            if "*" in release or "?" in release:
                 releasesWild += [release]
             else:
                 releasesNoWild += [release]
@@ -353,14 +351,14 @@ def listReleases(args):
             if not matchTag:
                 continue
             for releaseNoWild in releasesNoWild:
-                item_1 = releaseNoWild.split(r'.')[0]
+                item_1 = releaseNoWild.split(r".")[0]
                 if item_1.isdigit() and len(item_1) < 4:
                     if not tagName.startswith(releaseNoWild):
                         matchTag = False
                         break
                 else:
-                    if releaseNoWild != tagName and releaseNoWild not in re.split(
-                            r'[-.]', tagName):
+                    if (releaseNoWild != tagName and 
+                            releaseNoWild not in re.split(r"[-.]", tagName)):
                         matchTag = False
                         break
             if matchTag:
@@ -369,9 +367,8 @@ def listReleases(args):
     if len(tags) > 0:
         columns = os.get_terminal_size().columns
         pp = pprint.PrettyPrinter(indent=4, compact=True, width=columns)
-        print(
-            "Found the following release containers for the project= %s, %s\n" %
-            (project, releasePrint))
+        print("Found the following release containers for the project= %s, %s\n" %
+              (project, releasePrint))
         pp.pprint(tags)
         if len(tags) == 1:
             print()
@@ -379,9 +376,8 @@ def listReleases(args):
             print("\nTo run the above image, just run")
             print("\tsource %s %s,%s" % (sys.argv[0], project, tags[0]))
     else:
-        print(
-            "No release container found for the project=%s, and %s" %
-            (project, releasePrint))
+        print("No release container found for the project=%s, and %s" %
+              (project, releasePrint))
 
 
 def getImageInfo(project, release, printOut=True):
@@ -395,34 +391,33 @@ def getImageInfo(project, release, printOut=True):
         "/%s/tags/%s" % (repoID, release)
     json_obj = json.loads(getUrlContent(url_tag))
 
-    imageInfo['dockerPath'] = json_obj['location']
-    imageInfo['imageCompressedSize'] = json_obj['total_size']
-    imageInfo['lastUpdate'] = json_obj['created_at']
-    imageInfo['digest'] = json_obj['digest']
+    imageInfo["dockerPath"] = json_obj["location"]
+    imageInfo["imageCompressedSize"] = json_obj["total_size"]
+    imageInfo["lastUpdate"] = json_obj["created_at"]
+    imageInfo["digest"] = json_obj["digest"]
 
     if len(imageInfo) > 0 and printOut:
         print("The matched image info:")
-        print("\tdockerPath=", imageInfo['dockerPath'],
-              "\n\timage compressed size=", imageInfo['imageCompressedSize'],
-              "\n\tlast update time=", imageInfo['lastUpdate'],
-              "\n\tdigest=", imageInfo['digest'])
+        print("\tdockerPath=", imageInfo["dockerPath"],
+              "\n\timage compressed size=", imageInfo["imageCompressedSize"],
+              "\n\tlast update time=", imageInfo["lastUpdate"],
+              "\n\tdigest=", imageInfo["digest"])
     return imageInfo
 
 
 def printImageInfo(args):
     releaseTags = parseArgTags(args.tags, requireRelease=True)
-    project = releaseTags['project']
-    releases = releaseTags['releases']
+    project = releaseTags["project"]
+    releases = releaseTags["releases"]
     if len(releases) > 1:
-        print(
-            "Only one release tag is allowed, but multiple are given \n\t",
-            releases)
+        print("Only one release tag is allowed, but multiple are given \n\t",
+              releases)
         sys.exit(1)
     getImageInfo(project, releases[0])
 
 
 # build Singularity sandbox
-def build_sandbox(sandboxPath, dockerPath, force=False):
+def build_sandbox(contCmd, sandboxPath, dockerPath, force=False):
     if os.path.exists(sandboxPath):
         if not force and os.path.exists(sandboxPath + "/entrypoint.sh"):
             print("%s already, and would not override it." % sandboxPath)
@@ -430,8 +425,8 @@ def build_sandbox(sandboxPath, dockerPath, force=False):
             print("Quit now")
             sys.exit(1)
         os.system("chmod -R +w %s; rm -rf %s" % (sandboxPath, sandboxPath))
-    buildCmd = "singularity build --sandbox --fix-perms -F %s docker://%s" % (
-        sandboxPath, dockerPath)
+    buildCmd = "%s build --sandbox --fix-perms -F %s docker://%s" % (
+        contCmd, sandboxPath, dockerPath)
     print("\nBuilding Singularity sandbox\n")
     retCode = subprocess.call(buildCmd.split())
     if retCode != 0:
@@ -440,15 +435,16 @@ def build_sandbox(sandboxPath, dockerPath, force=False):
 
 
 # write setup for Singularity sandbox
-def write_sandboxSetup(filename, inputArgs, imageInfo, sandboxPath, bindOpt):
+def write_sandboxSetup(filename, inputArgs, imageInfo, contCmd, sandboxPath,
+                       bindOpt):
     imageSize = imageInfo["imageCompressedSize"]
     dockerPath = imageInfo["dockerPath"]
     lastUpdate = imageInfo["lastUpdate"]
     myScript = os.path.abspath(sys.argv[0])
-    shellFile = open(filename, 'w')
+    shellFile = open(filename, "w")
     shellFile.write("""
 inputArgs="%s"
-contCmd=singularity
+contCmd=%s
 dockerPath=%s
 imageCompressedSize=%s
 imageLastUpdate=%s
@@ -459,14 +455,14 @@ releaseSetup2="/home/atlas/release_setup.sh"
 if [ -e $sandboxPath$releaseSetup1 -o $sandboxPath$releaseSetup2 ]; then
    if [[ $# -eq 1 && "$1" =~ ^[Jj]upyter$ ]]; then
       runCmd="echo Jupyter is not ready yet"
-      # runCmd="singularity exec $bindOpt $sandboxPath /bin/bash -c "'"source $releaseSetup; jupyter lab"'
+      # runCmd="$contCmd exec $bindOpt $sandboxPath /bin/bash -c "'"source $releaseSetup; jupyter lab"'
    else
       if [ -e $sandboxPath$releaseSetup1 ]; then
          releaseSetup=$releaseSetup1
       else
          releaseSetup=$releaseSetup2
       fi
-      runCmd="singularity run $bindOpt $sandboxPath /bin/bash --init-file $releaseSetup"
+      runCmd="$contCmd run $bindOpt $sandboxPath /bin/bash --init-file $releaseSetup"
    fi
    echo -e "\\n$runCmd\\n"
    eval $runCmd
@@ -475,14 +471,33 @@ else
    echo "Please rebuild the Singularity sandbox by running the following"
    echo -e "\n\t source %s $imageName"
 fi
-""" % (' '.join(inputArgs), dockerPath, imageSize, lastUpdate, sandboxPath, bindOpt, myScript))
+""" % (" ".join(inputArgs), contCmd, dockerPath, imageSize, lastUpdate,
+       sandboxPath, bindOpt, myScript))
     shellFile.close()
+
+
+# Failover another container command "apptainer" or "singularity"
+def failOver_Singularity(args, imageInfo, oldContCmd):
+    if "apptainer" in ContCmds_available or "singularity" in ContCmds_available:
+        if args.contCmd != oldContCmd:
+            if "apptainer" in ContCmds_available:
+                newContCmd = "apptainer"
+            else:
+                newContCmd = "singularity"
+            print("\t Next trying another container command %s again" % newContCmd)
+            setup(args, imageInfo, newContCmd)
+            sys.exit(0)
+        else:
+            print("\nYou may retry with the option --app or --sing")
+            sys.exit(1)
+    else:
+        sys.exit(1)
 
 
 # create docker/podman container
 def create_container(contCmd, contName, imageInfo, bindOpt, args):
     force = args.force
-    dockerPath = imageInfo['dockerPath']
+    dockerPath = imageInfo["dockerPath"]
     pullCmd = "%s pull %s" % (contCmd, dockerPath)
     retCode = subprocess.call(pullCmd.split())
     # username = getpass.getuser()
@@ -492,19 +507,18 @@ def create_container(contCmd, contName, imageInfo, bindOpt, args):
     # jupyterOpt += " -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro"
     if retCode != 0:
         print("!!Warning!! Pulling the image %s failed, exit now" % dockerPath)
-        sys.exit(1)
+        failOver_Singularity(args, imageInfo, contCmd)
 
-    ret, out = run_shellCmd("%s ps -a -f name='^%s$' " % (contCmd, contName))
+    _, out = run_shellCmd("%s ps -a -f name='%s' " % (contCmd, contName))
     if out.find(contName) > 0:
         if force:
-            print(
-                "\nThe container=%s already exists, removing it now" %
-                contName)
-            ret, out = run_shellCmd("%s rm -f %s" % (contCmd, contName))
+            print("\nThe container=%s already exists, removing it now" %
+                  contName)
+            run_shellCmd("%s rm -f %s" % (contCmd, contName))
         else:
-            print(
-                "\nThe container=%s already exists, \n\tplease rerun the command with the option '-f' to remove it" %
-                contName)
+            print("\nThe container=%s already exists, "
+                  "\n\tplease rerun the command with the option '-f' to remove it" %
+                  contName)
             print("\nQuit now")
             sys.exit(1)
 
@@ -513,65 +527,43 @@ def create_container(contCmd, contName, imageInfo, bindOpt, args):
                                               pwd, pwd, jupyterOpt, bindOpt)
     createCmd = "%s create %s --name %s %s" % \
                 (contCmd, createOpt, contName, dockerPath)
-    ret, out = run_shellCmd(createCmd, False)
+    ret, _ = run_shellCmd(createCmd, False)
     if ret != 0:
         print("!!Error!! Failed in running the following command")
         print("\t", createCmd)
-        if 'singularity' in ContCmds_available:
-            if args.contCmd != contCmd:
-                print("\t Next trying another container command 'singularity' again")
-                return setup(args, imageInfo, 'singularity')
-            else:
-                print("\nYou may retry with the option --sing")
-                sys.exit(1)
-        else:
-            sys.exit(1)
+        failOver_Singularity(args, imageInfo, contCmd)
 
     startCmd = "%s start %s" % (contCmd, contName)
-    ret, out = run_shellCmd(startCmd, False)
+    ret, _ = run_shellCmd(startCmd, False)
     if ret != 0:
         print("!!Error!! Failed in running the following command")
         print("\t", startCmd)
         rmCmd = "%s rm -f %s" % (contCmd, contName)
         run_shellCmd(rmCmd, exitOnFailure=False)
-        if 'singularity' in ContCmds_available:
-            if args.contCmd != contCmd:
-                print("\t Next trying another container command 'singularity' again")
-                return setup(args, imageInfo, 'singularity')
-            else:
-                print("\nYou may retry with the option --sing")
-                sys.exit(1)
-        else:
-            sys.exit(1)
+        failOver_Singularity(args, imageInfo, contCmd)
 
 
 # write setup for Docker/Podman container
-def write_dockerSetup(
-        filename,
-        inputArgs,
-        contCmd,
-        contName,
-        imageInfo,
-        bindOpt,
-        override=False):
+def write_dockerSetup(filename, inputArgs, contCmd, contName, imageInfo,
+                      bindOpt, override=False):
     imageSize = imageInfo["imageCompressedSize"]
     dockerPath = imageInfo["dockerPath"]
     lastUpdate = imageInfo["lastUpdate"]
 
-    wcCmd = "%s exec %s wc -l /release_setup.sh /home/atlas/release_setup.sh 2>/dev/null" % (
-        contCmd, contName)
-    ret, releaseSetup = run_shellCmd(wcCmd, exitOnFailure=False)
-    if len(releaseSetup.split('\n')) == 1:
+    wcCmd = ("%s exec %s wc -l /release_setup.sh "
+             "/home/atlas/release_setup.sh 2>/dev/null" % (contCmd, contName))
+    _, releaseSetup = run_shellCmd(wcCmd, exitOnFailure=False)
+    if len(releaseSetup.split("\n")) == 1:
         print("!!Error!! No 'release_setup.sh' is found in the image, exit now")
         sys.exit(1)
     else:
         items = releaseSetup.split()
-        if '/release_setup.sh' in items:
-            releaseSetup = '/release_setup.sh'
+        if "/release_setup.sh" in items:
+            releaseSetup = "/release_setup.sh"
         else:
-            releaseSetup = '/home/atlas/release_setup.sh'
+            releaseSetup = "/home/atlas/release_setup.sh"
 
-    shellFile = open(filename, 'w')
+    shellFile = open(filename, "w")
     shellFile.write("""
 inputArgs="%s"
 contCmd=%s
@@ -585,7 +577,7 @@ jupyterOpt="-p 8888:8888 -e NB_USER=$USER -e HOME=$HOME -v ${HOME}:${HOME}"
 re_exited="ago[\ ]+Exited"
 re_up="ago[\ ]+Up"
 
-listOut=$($contCmd ps -a -f name='^'$contName'$' 2>/dev/null | tail -1)
+listOut=$($contCmd ps -a -f name="$contName" 2>/dev/null | tail -1)
 
 if [[ "$listOut" =~ $re_exited ]]; then
    startCmd="$contCmd start $contName"
@@ -598,7 +590,8 @@ elif [[ "$listOut" =~ $re_up ]]; then
       eval $unpauseCmd >/dev/null
    fi
 else
-   createCmd="$contCmd create -it $bindOpt -v $PWD:$PWD -w $PWD $jupyterOpt --name $contName $dockerPath"
+   createCmd=("$contCmd create -it $bindOpt -v $PWD:$PWD -w $PWD "
+              "$jupyterOpt --name $contName $dockerPath")
    echo -e "\\n$createCmd"
    eval $createCmd >/dev/null
    startCmd="$contCmd start $contName"
@@ -612,7 +605,8 @@ if [[ $# -eq 1 && "$1" =~ ^[Jj]upyter$ ]]; then
    runCmd="echo Jupyter is not ready yet"
    # $contCmd exec -u ${uid}:${gid} -e USER=$USER $contName ls $releaseSetup >/dev/null
    # if [ $? -eq 0 ]; then
-   #    runCmd="$contCmd exec -it -u ${uid}:${gid} -e USER=$USER $contName /bin/bash -c "'"source $releaseSetup; jupyter lab --ip 0.0.0.0"'
+   #    runCmd=("$contCmd exec -it -u ${uid}:${gid} -e USER=$USER $contName /bin/bash -c "
+   #            '"source $releaseSetup; jupyter lab --ip 0.0.0.0"')
    # else
    #    echo "This release container can NOT run JupyterLab in non-root mode; exit now"
    #    runCmd=""
@@ -621,7 +615,7 @@ else
    runCmd="$contCmd exec -it $contName /bin/bash --init-file $releaseSetup"
 fi
 
-if [[ $runCmd != '' ]]; then
+if [[ "$runCmd" != "" ]]; then
    echo -e "\\n$runCmd\\n"
    eval $runCmd
 fi
@@ -629,17 +623,17 @@ fi
 stopCmd="$contCmd stop $contName"
 echo -e "\\n$stopCmd"
 eval $stopCmd
-""" % (' '.join(inputArgs), contCmd, dockerPath, imageSize, lastUpdate,
+""" % (" ".join(inputArgs), contCmd, dockerPath, imageSize, lastUpdate,
        contName, bindOpt, releaseSetup))
     shellFile.close()
 
 
 def getMyImageInfo(filename):
-    shellFile = open(filename, 'r')
+    shellFile = open(filename, "r")
     myImageInfo = {}
     for line in shellFile:
-        if re.search(r'^(cont|image|docker|sand|runOpt|lines).*=', line):
-            key, value = line.strip().split('=')
+        if re.search(r"^(cont|image|docker|sand|runOpt|lines).*=", line):
+            key, value = line.strip().split("=")
             myImageInfo[key] = value
     return myImageInfo
 
@@ -649,14 +643,13 @@ def isLastRelease(filename, project, release, contCmd):
         return False
 
     myImageInfo = getMyImageInfo(filename)
-    if 'dockerPath' not in myImageInfo:
+    if "dockerPath" not in myImageInfo:
         return False
 
     dockerPath = myImageInfo["dockerPath"]
     if dockerPath.endswith("/%s:%s" % (project, release)):
         if contCmd is None or contCmd == myImageInfo["contCmd"]:
-            print(
-                "The release was previously used in the current directory.\n\t Reuse it now")
+            print("The release was previously used in the current directory.\n\t Reuse it now")
             # sleep(1)
             os.utime(filename, None)
             return True
@@ -683,32 +676,31 @@ def cleanLast(filename):
 
     myImageInfo = getMyImageInfo(filename)
     if len(myImageInfo) > 0:
-        contCmd = myImageInfo['contCmd']
-        if contCmd == 'singularity' or contCmd == 'apptainer':
-            sandboxPath = myImageInfo['sandboxPath']
+        contCmd = myImageInfo["contCmd"]
+        if contCmd == "singularity" or contCmd == "apptainer":
+            sandboxPath = myImageInfo["sandboxPath"]
             print("\nRemoving the last sandbox=%s\n" % sandboxPath)
             try:
                 rmtree(sandboxPath)
             except BaseException:
                 pass
-            os.rename(filename, filename + '.last')
+            os.rename(filename, filename + ".last")
         else:
-            contName = myImageInfo['contName']
+            contName = myImageInfo["contName"]
             print("\nRemoving the last container=%s\n" % contName)
             rmCmd = "%s rm -f %s" % (contCmd, contName)
             run_shellCmd(rmCmd, exitOnFailure=False)
-            os.rename(filename, filename + '.last')
+            os.rename(filename, filename + ".last")
 
 
 def prepare_setup(args):
     global ContCmds_available
     releaseTags = parseArgTags(args.tags, requireRelease=True)
-    project = releaseTags['project']
-    releases = releaseTags['releases']
+    project = releaseTags["project"]
+    releases = releaseTags["releases"]
     if len(releases) > 1:
-        print(
-            "Only one release tag is allowed, but multiple are given \n\t",
-            releases)
+        print("Only one release tag is allowed, but multiple are given \n\t",
+              releases)
     release = releases[0]
 
     if not args.force:
@@ -716,9 +708,6 @@ def prepare_setup(args):
             sys.exit(0)
 
     imageInfo = getImageInfo(project, release)
-    # print("Found the release=%s:%s" %(project, release),"\n\t with the dockerPath=",dockerPath, "; image compressed size=",imageSize)
-    # sys.exit(0)
-
     # dockerPath = imageInfo["dockerPath"]
 
     for cmd in CONTAINER_CMDS:
@@ -727,7 +716,8 @@ def prepare_setup(args):
             ContCmds_available += [cmd]
 
     if len(ContCmds_available) == 0:
-        print("None of container running commands: docker, podman, singularity; exit now")
+        print("Found none of container running commands:",
+              CONTAINER_CMDS, "; exit now")
         print("Please install one of the above tool first")
         sys.exit(1)
 
@@ -736,11 +726,8 @@ def prepare_setup(args):
         if args.contCmd in ContCmds_available:
             contCmd = args.contCmd
         else:
-            print(
-                "The specified command=%s to run containers is NOT found" %
-                args.contCmd)
-            print(
-                "Please choose the available command(s) on the machine to run containers")
+            print("The specified command=%s to run containers is NOT found" % args.contCmd)
+            print("Please choose the available command(s) on the machine to run containers")
             print("\t", ContCmds_available)
             sys.exit(1)
 
@@ -753,56 +740,53 @@ def setup(args, imageInfo=None, contCmd=None):
         imageInfo, contCmd = prepare_setup(args)
 
     dockerPath = imageInfo["dockerPath"]
-    project, release = dockerPath.split('/')[-1].split(':')
+    project, release = dockerPath.split("/")[-1].split(":")
 
     paths = args.volume
     volumes = []
     if paths is not None:
         pwd = os.getcwd()
         home = os.path.expanduser("~")
-        for path in paths.split(','):
-            if os.path.samefile(pwd, path):
+        for path in paths.split(","):
+            localPath = path.split(":")[0]
+            if os.path.samefile(pwd, localPath):
                 continue
-            elif contCmd == "singularity" and os.path.samefile(home, path):
+            elif (contCmd == "singularity" or
+                  contCmd == "apptainer") and os.path.samefile(home, localPath):
                 continue
             volumes += [path]
 
-    if contCmd == "singularity":
+    if contCmd == "singularity" or contCmd == "apptainer":
         if not os.path.exists("singularity"):
             os.mkdir("singularity")
         sandboxPath = "singularity/%s-%s" % (project, release)
-        build_sandbox(sandboxPath, dockerPath, args.force)
-        bindOpt = ''
+        build_sandbox(contCmd, sandboxPath, dockerPath, args.force)
+        bindOpt = ""
         for path in volumes:
             bindOpt += " -B %s" % path
-        write_sandboxSetup(
-            args.shellFilename,
-            args.tags,
-            imageInfo,
-            sandboxPath,
-            bindOpt)
+        write_sandboxSetup(args.shellFilename, args.tags, imageInfo, contCmd,
+                           sandboxPath, bindOpt)
 
-    elif contCmd == "podman" or contCmd == "docker":
+    elif contCmd == "podman" or contCmd == "docker" or contCmd == "nerdctl":
         testCmd = "%s info" % contCmd
-        run_shellCmd(testCmd)
-        contName = '_'.join([getpass.getuser(), project, release])
+        ret, _ = run_shellCmd(testCmd, False)
+        if ret != 0:
+            print("!!Error!! Failed in running the following command")
+            print("\t", testCmd)
+            failOver_Singularity(args, imageInfo, contCmd)
 
-        bindOpt = ''
+        contName = "_".join([getpass.getuser(), project, release])
+
+        bindOpt = ""
         for path in volumes:
-            if path.find(':') > 0:
+            if path.find(":") > 0:
                 bindOpt += " -v %s" % path
             else:
                 bindOpt += " -v %s:%s" % (path, path)
 
         create_container(contCmd, contName, imageInfo, bindOpt, args)
-        write_dockerSetup(
-            args.shellFilename,
-            args.tags,
-            contCmd,
-            contName,
-            imageInfo,
-            bindOpt,
-            args.force)
+        write_dockerSetup(args.shellFilename, args.tags, contCmd, contName,
+                          imageInfo, bindOpt, args.force)
 
     # sleep(1)
 
@@ -811,7 +795,7 @@ def jupyter(args):
     if not os.path.exists(args.shellFilename):
         print("No previous container/sandbox setup is found")
         myScript = os.path.abspath(sys.argv[0])
-        print("Please run 'source %s setup {ImageName}' first" % myScript)
+        print("Please run 'source %s setup ImageName' first" % myScript)
         return None
 
 
@@ -834,90 +818,79 @@ def main():
   /.%s --sing AnalysisBase,21.2.132""" % (myScript, myScript)
 
     parser = argparse.ArgumentParser(
-        epilog=example_global,
-        usage='%(prog)s [options]',
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+            epilog=example_global,
+            usage="%(prog)s [options]",
+            formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
-        '--shellFilename',
-        action='store',
-        help=argparse.SUPPRESS)
+            "--shellFilename",
+            action="store",
+            help=argparse.SUPPRESS)
     parser.add_argument(
-        '--rerun',
-        action='store_true',
-        help="rerun the already setup container")
+            "--rerun",
+            action="store_true",
+            help="rerun the already setup container")
     parser.add_argument(
-        '-V',
-        '--version',
-        action='store_true',
-        help="print out the script version")
-    sp = parser.add_subparsers(dest='command', help='Default=setup')
+            "-V", "--version",
+            action="store_true",
+            help="print out the script version")
+    sp = parser.add_subparsers(dest="command", help="Default=setup")
 
     sp_listReleases = sp.add_parser(
-        'listReleases',
-        aliases=['list'],
-        help='list container releases',
-        description='list all available ATLAS releases of a given project')
-    # sp_listReleases.add_argument('projectName', metavar='<ProjectName>', help='Project name to list releases')
+            "listReleases", aliases=["list"],
+            help="list container releases",
+            description="list all available ATLAS releases of a given project")
+    # sp_listReleases.add_argument("projectName", metavar="<ProjectName>", help="Project name to list releases")
     sp_listReleases.add_argument(
-        'tags',
-        nargs='*',
-        metavar='<ReleaseTags>',
-        help='Project name to list releases, and release number with wildcard *')
+            "tags", nargs="*", metavar="<ReleaseTags>",
+            help="Project name to list releases, and release number with wildcard *")
     sp_listReleases.set_defaults(func=listReleases)
 
     sp_printImageInfo = sp.add_parser(
-        'printImageInfo',
-        aliases=['getImageInfo'],
-        help='print Info of a container release',
-        description='print the image size and last update date of the given image')
-    sp_printImageInfo.add_argument('tags', nargs='+', metavar='<ReleaseTags>')
+            "printImageInfo", aliases=["getImageInfo"],
+            help="print Info of a container release",
+            description="print the image size and last update date of the given image")
+    sp_printImageInfo.add_argument("tags", nargs="+", metavar="<ReleaseTags>")
     sp_printImageInfo.set_defaults(func=printImageInfo)
 
     sp_printMe = sp.add_parser(
-        'printMe',
-        help='print info of the setup container',
-        description='print the container/sandbox set up for the work directory')
+            "printMe",
+            help="print info of the setup container",
+            description="print the container/sandbox set up for the work directory")
     sp_printMe.set_defaults(func=printMe)
 
-    desc = 'update the script itself'
-    sp_update = sp.add_parser('selfUpdate', help=desc, description=desc)
+    desc = "update the script itself"
+    sp_update = sp.add_parser("selfUpdate", help=desc, description=desc)
     sp_update.set_defaults(func=selfUpdate)
 
     sp_setup = sp.add_parser(
-        'setup',
-        help='set up a container release',
-        description='create a container/sandbox for the given image',
-        epilog=example_setup,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+            "setup",
+            help="set up a container release",
+            description="create a container/sandbox for the given image",
+            epilog=example_setup,
+            formatter_class=argparse.RawDescriptionHelpFormatter)
     group_cmd = sp_setup.add_mutually_exclusive_group()
     for cmd in CONTAINER_CMDS:
         group_cmd.add_argument("--%s" % cmd, dest="contCmd",
                                action="store_const", const="%s" % cmd,
                                help="Use %s to the container" % cmd)
     sp_setup.add_argument(
-        '-f',
-        '--force',
-        action='store_true',
-        default=False,
-        help="Force to override the existing container/sandbox")
+            "-f", "--force",
+            action="store_true", default=False,
+            help="Force to override the existing container/sandbox")
     sp_setup.add_argument(
-        '-B',
-        '--volume',
-        nargs='?',
-        metavar='path[,srcPath:targePath]',
-        help="Additional path(s) delimited by comma, to be mounted into the container")
+            "-B", "--volume",
+            nargs="?", metavar="path[,srcPath:targePath]",
+            help="Additional path(s) delimited by comma, to be mounted into the container")
     sp_setup.add_argument(
-        'tags',
-        nargs='+',
-        metavar='<ReleaseTags>',
-        help='A release to run')
+            "tags", nargs="+", metavar="<ReleaseTags>",
+            help="A release to run")
     sp_setup.set_defaults(func=setup)
-    set_default_subparser(parser, 'setup', 3)
+    set_default_subparser(parser, "setup", 3)
 
     sp_jupyter = sp.add_parser(
-        'jupyter',
-        help='(not ready) run Jupyter with the container',
-        description='(not ready yet)run JupyterLab on the already created container/sandbox')
+            "jupyter",
+            help="(not ready) run Jupyter with the container",
+            description="(not ready yet)run JupyterLab on the already created container/sandbox")
     sp_jupyter.set_defaults(func=jupyter)
 
     args, _ = parser.parse_known_args()
