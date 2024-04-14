@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-04-11-r01
+# version=2024-04-12-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -8,48 +8,46 @@ ret=0
 
 sourced=0
 if [ -n "$ZSH_VERSION" ]; then
-   case $ZSH_EVAL_CONTEXT in *:file) sourced=1; esac
+    case $ZSH_EVAL_CONTEXT in *:file) sourced=1; esac
 else
-   case ${0##*/} in bash|-bash|zsh|-zsh) sourced=1; esac
+    case ${0##*/} in bash|-bash|zsh|-zsh) sourced=1; esac
 fi
 
 mySetup=runMe-here.sh
 
 if [[ -e $mySetup && ( $# -eq 0 || "$*" =~ "--rerun" ) ]]; then
-   source $mySetup
-   ret=$?
+    source $mySetup
+    ret=$?
 elif [[ $# -eq 1 && "$1" =~ ^[Jj]upyter$ ]]; then
-   # source $mySetup jupyter
-   echo "Jupyter is not ready yet"
-   ret=$?
+    # source $mySetup jupyter
+    echo "Jupyter is not ready yet"
+    ret=$?
 else
-   if [ "X" != "X$BASH_SOURCE" ]; then
-      shopt -s expand_aliases
-   fi
-   # alias py_readlink="python3 -I -S -c 'import os,sys;print(os.path.realpath(sys.argv[1]))'"
-   # alias py_stat="python3 -I -S -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))'"
-   myDir=$(dirname $myScript)
-   myDir=$(readlink -f $myDir)
-   # myDir=$(py_readlink $myDir)
-   if [[ $# -eq 0 ]]; then
-       python3 -B -I "$myScript" --help
-       ret=$?
-   else
-      now=$(date +"%s")
-      python3 -B -I -S "$myScript" --shellFilename $mySetup "$@"
-      ret=$?
-      if [ -e $mySetup ]; then
-         # check if the setup script is newly created
-         # mtime_setup=$(py_stat $mySetup)
-         mtime_setup=$(stat -c %Y $mySetup 2>/dev/null || stat -f %m $mySetup)
-         if [ "$(( $mtime_setup - $now ))" -ge 0 ]; then
-            echo -e "\nTo reuse the same container next time, just run"
-            echo -e "\n\t source $mySetup \n or \n\t source $myScript"
-            sleep 2
-            source $mySetup
-         fi
-      fi
-   fi
+    if [ "X" != "X$BASH_SOURCE" ]; then
+        shopt -s expand_aliases
+    fi
+    myDir=$(dirname $myScript)
+    myDir=$(readlink -f $myDir)
+    # myDir=$(py_readlink $myDir)
+    if [[ $# -eq 0 ]]; then
+        python3 -B -I "$myScript" --help
+        ret=$?
+    else
+        now=$(date +"%s")
+        python3 -B -I -S "$myScript" --shellFilename $mySetup "$@"
+        ret=$?
+        if [ -e $mySetup ]; then
+            # check if the setup script is newly created
+            # mtime_setup=$(py_stat $mySetup)
+            mtime_setup=$(stat -c %Y $mySetup 2>/dev/null || stat -f %m $mySetup)
+            if [ "$(( $mtime_setup - $now ))" -ge 0 ]; then
+                echo -e "\nTo reuse the same container next time, just run"
+                echo -e "\n\t source $mySetup \n or \n\t source $myScript"
+                sleep 2
+                source $mySetup
+            fi
+        fi
+    fi
 fi
 [[ $sourced == 1 ]] && return $ret || exit $ret
 '''
@@ -62,7 +60,6 @@ from datetime import datetime, timezone
 # from time import sleep
 
 import argparse
-# import ast
 import json
 import pprint
 import re
@@ -76,12 +73,13 @@ from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
 import ssl
 
+
 GITHUB_REPO = "usatlas/ML-Containers"
 GITHUB_PATH = "run-atlas_container.sh"
 URL_SELF = "https://raw.githubusercontent.com/%s/main/%s" % (
-    GITHUB_REPO, GITHUB_PATH)
+            GITHUB_REPO, GITHUB_PATH)
 URL_API_SELF = "https://api.github.com/repos/%s/commits?path=%s&per_page=100" % (
-    GITHUB_REPO, GITHUB_PATH)
+                GITHUB_REPO, GITHUB_PATH)
 CONTAINER_CMDS = ["podman", "docker", "nerdctl", "apptainer", "singularity"]
 ContCmds_available = []
 
@@ -357,7 +355,7 @@ def listReleases(args):
                         matchTag = False
                         break
                 else:
-                    if (releaseNoWild != tagName and 
+                    if (releaseNoWild != tagName and
                             releaseNoWild not in re.split(r"[-.]", tagName)):
                         matchTag = False
                         break
