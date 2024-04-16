@@ -134,11 +134,12 @@ RUN  chmod +x /tmp/gtar-newEnv-on-base.sh \
 #
 COPY setupMe-on-host.sh create-newEnv-on-base.sh setup-UserEnv-in-container.sh create-py_newEnv-on-base.sh /
 COPY printme.sh /printme.sh
-RUN echo "source /printme.sh" >> ~/.bashrc
+RUN cp printme.sh /etc/profile.d/
+# RUN echo "source /printme.sh" >> ~/.bashrc
 
 # Singularity
-# RUN mkdir -p /.singularity.d/env \
-#    && cp /printme.sh /.singularity.d/env/99-printme.sh
+RUN mkdir -p /.singularity.d/env \
+    && cp /printme.sh /.singularity.d/env/99-printme.sh
 
 COPY entrypoint.sh /
 RUN chmod 755 /entrypoint.sh

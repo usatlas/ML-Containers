@@ -149,11 +149,12 @@ COPY setupMe-on-host.sh check-gpu-in-tensorflow.py create-newEnv-on-base.sh setu
 # The the package cuda-compat, has already included libcuda.so, so printme-gpu.sh is not longer correct.
 # COPY printme-gpu.sh /printme.sh
 COPY printme.sh /printme.sh
-RUN echo "source /printme.sh" >> ~/.bashrc
+RUN cp printme.sh /etc/profile.d/
+# RUN echo "source /printme.sh" >> ~/.bashrc
 
 # Singularity
-# RUN mkdir -p /.singularity.d/env \
-#     && cp /printme.sh /.singularity.d/env/99-printme.sh
+RUN mkdir -p /.singularity.d/env \
+    && cp /printme.sh /.singularity.d/env/99-printme.sh
 
 COPY entrypoint.sh /
 RUN chmod 755 /entrypoint.sh
