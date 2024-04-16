@@ -17,8 +17,8 @@ Our objective is to construct machine learning (ML) images with the following at
 Currently there are 4 types of ML (Machine Learning) images built:
 - **ml-base**: the **base image** of the other 3 images
 - **ml-pyroot**: add **PyROOT** on top of *ml-base*
-- **ml-tensorflow**: add **Tensorflow** on top of *ml-base*
-- **ml-tensorflow-gpu**: add **Tensorflow-gpu** on top of *ml-base*
+- **ml-tensorflow-cpu**: add **Tensorflow-cpu** and some **keras** related packages on top of *ml-base*
+- **ml-tensorflow-gpu**: add **Tensorflow-gpu** and some keras related packages on top of *ml-base*
 
 ## Package Manager `micromamba`
 
@@ -90,6 +90,15 @@ The *libz* is installed together with ROOT, but it is not compatible with the sy
 The command `root-config --libs` does not include *libz*, resulting in that the incompatible system *libz* 
 would be used in compiling ROOT applications. To resolve this problem, *libz* is added manually in `root-config`.
 
+### Image ml-tensorflow-cpu and ml-tensorflow-gpu
+
+On top base of the base image *ml-base*, the package **tensorflow** (no GPU support) and **tensorflow-gpu** are added accordingly, 
+with the following additional packages:
+- keras-cv: [KerasCV](https://keras.io/keras_cv/) is a library of modular computer vision components that work natively with TensorFlow, JAX, or PyTorch.
+- keras-tuner: [KerasTuner](https://keras.io/keras_tuner/) is an easy-to-use, scalable hyperparameter optimization framework that solves the pain points of hyperparameter search.
+- keras-nlp: [KerasNLP](https://keras.io/keras_nlp/) is a natural language processing library that works natively with TensorFlow, JAX, or PyTorch.
+- tensorflow-datasets: [TensorFlow Datasets](https://www.tensorflow.org/datasets) is a collection of datasets ready to use, with TensorFlow or other Python ML frameworks, such as Jax.
+
 ## GitHub Link
 
 The corresponding Dockerfiles and shell scripts are hosted on the following GitHub Repo:
@@ -102,14 +111,14 @@ The corresponding Dockerfiles and shell scripts are hosted on the following GitH
 
 To build a Docker image, says, *ml-base*, just run the following command
 ```shell
-docker build --build-arg PyVer=3.8 -t ml-base -f ml-base.Dockerfile .
+docker build --build-arg PyVer=3.9 -t ml-base -f ml-base.Dockerfile .
 ```
 
-We would tag it to "centos7-python38" for CentOS7-based image with python-3.8, or "alma9-python39" for Alma9-based image with python-3.9. For example
+We would tag it to "centos7-python39" for CentOS7-based image with python-3.9, or "alma9-python39" for Alma9-based image with python-3.9. For example
 ```shell
-% docker tag ml-base yesw2000/ml-base:centos7-python38
+% docker tag ml-base yesw2000/ml-base:centos7-python39
 % docker login
-% docker push yesw2000/ml-base:centos7-python38
+% docker push yesw2000/ml-base:centos7-python39
 ```
 
 The above command pushes the image onto [the Docker hub](https://hub.docker.com/) under the personal account of *yesw2000*.
@@ -139,10 +148,11 @@ All 4 ML images are deployed onto CVMFS-unpacked **automatically** via [the wish
 under */cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/*.
 
 ```shell
-% ls /cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000 
-ml-base:centos7-python38            ml-tensorflow-gpu:centos7-python38
-ml-pyroot:centos7-python38          pyroot-atlas:centos7-python39
-ml-tensorflow-cpu:centos7-python38
+% ls /cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000
+ml-base:alma9-python39    ml-pyroot:alma9-python39    ml-tensorflow-cpu:alma9-python39    ml-tensorflow-gpu:alma9-python39
+ml-base:centos7-python38  ml-pyroot:centos7-python38  ml-tensorflow-cpu:centos7-python38  ml-tensorflow-gpu:centos7-python38
+ml-base:centos7-python39  ml-pyroot:centos7-python39  ml-tensorflow-cpu:centos7-python39  ml-tensorflow-gpu:centos7-python39
+pyroot-atlas:centos7-python39
 ```
 
 ## ML Images in Jupyter
@@ -150,12 +160,12 @@ ml-tensorflow-cpu:centos7-python38
 To ensure having a clean Jupyter kernel list on the running Jupyter lab/hub with the ML images, the env variable **JUPYTER_PATH** is defined to the value */opt/conda/share/jupyter*.
 
 Because the [jupyter_client/manager.py](https://github.com/jupyter/jupyter_client/blob/main/jupyter_client/manager.py) will 
-replace `python`, `python3`, or `python3.8` with the python executable to start `jupyter-lab` or `jupyter-labhub`, the default python3 kernel 
-is modified as follows (for images with *python3.8*):
+replace `python`, `python3`, or `python3.9` with the python executable to start `jupyter-lab` or `jupyter-labhub`, the default python3 kernel 
+is modified as follows (for images with *python3.9*):
 ```json
 {
  "argv": [
-  "/usr/bin/env", "python3.8", "-s",
+ "python3-nohome", "-s",
   "-m",
   "ipykernel_launcher",
   "-f",
@@ -168,12 +178,17 @@ is modified as follows (for images with *python3.8*):
  }
 }
 ```
+where `python3-nohome` is defined as:
+```shell
+#!/bin/bash
+myScript="${BASH_SOURCE:-$0}"
+myDir=$(dirname $myScript)
+myDir=$(readlink -f $myDir)
+PYTHONHOME= $myDir/python3 "$@"
+```
 
-Here the specific version of python3, that is, **python3.8**, is used, to make it work on the BNL Jupyter hub where the outside host python path 
-is **prepended** into the env variable **PATH** inside running containers. So the python3 from the inside containers, 
-not from the outside host, will be used.
-
-Using the command `env`, instead of the absolute path of command `python3`, makes the images **flexible**, 
+Using the script *python3-nohome* which will use the `python3` under the same path,
+makes the Jupyter independent out of the outside python env,
 allowing the images to be used in either containers or as virtual envs.
 
 The python option ""**-s**"" is used to ignore user site directory under *$HOME/.local/*, which may contain incompatible packages with the images.
@@ -195,29 +210,21 @@ These extended user environments can subsequently be conveniently reused.
 
 Upon the container startup of the ML images, the following message would be printed out:
 
-> % singularity run /cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/ml-base:centos7-python38 
-> 
+> % singularity run /cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/ml-base:alma9-python39
+>
 > For the content in this container,
 >   please read the file /list-of-pkgs-inside.txt
-> 
+>
 > To create your own new env, run "**source /create-newEnv-on-base.sh** -h" for help
 > Singularity>
 
 As the message suggests, just run `source /create-newEnv-on-base.sh` to create a new extended env.
 ```shell
 % Singularity> source /create-newEnv-on-base.sh -p myEnv
-
-                                           __
-          __  ______ ___  ____ _____ ___  / /_  ____ _
-         / / / / __ `__ \/ __ `/ __ `__ \/ __ \/ __ `/
-        / /_/ / / / / / / /_/ / / / / / / /_/ / /_/ /
-       / .___/_/ /_/ /_/\__,_/_/ /_/ /_/_.___/\__,_/
-      /_/
-
 Empty environment created at prefix: /tmp/yesw/test-contEnv/myEnv
 Next time, you can just run the following to activate your extended env
         source /tmp/yesw/test-contEnv/myEnv/setup-UserEnv-in-container.sh
-(myEnv) Singularity> 
+(myEnv) Singularity>
 (myEnv) Singularity> ls -1 myEnv
 baseEnv_dir
 bin
@@ -237,40 +244,33 @@ and the env destination subdir is *myEnv* (as the option **-p myEnv"** specifies
 A shell script *setup-UserEnv-in-container.sh* is created, saving the Singularity image path and the bind-mount paths used.
 
 To reuse this new extended in a new session, just simply run `source /tmp/yesw/test-contEnv/myEnv/setup-UserEnv-in-container.sh`. 
-It would start up the associated Singulary image, then activate this new extended env:
+It would start up the associated Singularity image, then activate this new extended env:
 
 ```shell
 % source /tmp/yesw/test-contEnv/myEnv/setup-UserEnv-in-container.sh
-singularity exec --env CONTAINER_USERENV=yes -B /home/tmp/yesw/test-contEnv/myEnv /cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/ml-base:centos7-python38 /bin/bash --rcfile /home/tmp/yesw/test-contEnv/myEnv/setup-UserEnv-in-container.sh
+singularity exec --env CONTAINER_USERENV=yes -B /home/tmp/yesw/test-contEnv/myEnv /cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/ml-base:alma9-python39 /bin/bash --rcfile /home/tmp/yesw/test-contEnv/myEnv/setup-UserEnv-in-container.sh
 Activating the user env under /home/tmp/yesw/test-contEnv/myEnv
-Singularity> 
+Singularity>
 ```
 
 ### Env Extension in Virtual Env
 
 Since the images are built through `micromamba`, the images can also be used as virtual envs by sourcing the script *setupMe-on-host.sh*:
 
-> % source /cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/ml-base:centos7-python38/setupMe-on-host.sh 
-> 
+> % source /cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/ml-base:alma9-python39/setupMe-on-host.sh
+>
 > To create your own new env, run "**source $EnvTopDir/create-newEnv-on-base.sh** -h" for help
 > (base) %
 
 Then we source the same script *create-newEnv-on-base.sh*** as in container running, to create an extended env:
 ```shell
 (base) % source $EnvTopDir/create-newEnv-on-base.sh -p myEnv
-
-                                           __
-          __  ______ ___  ____ _____ ___  / /_  ____ _
-         / / / / __ `__ \/ __ `/ __ `__ \/ __ \/ __ `/
-        / /_/ / / / / / / /_/ / / / / / / /_/ / /_/ /
-       / .___/_/ /_/ /_/\__,_/_/ /_/ /_/_.___/\__,_/
-      /_/
-
 Empty environment created at prefix: /home/tmp/yesw/test-env/myEnv
 Next time, you can just run the following to activate your extended env
         source /home/tmp/yesw/test-env/myEnv/setupMe-on-host.sh
+
 (myEnv) %
-(myEnv) % ls -1 myEnv 
+(myEnv) % ls -1 myEnv
 baseEnv_dir
 bin
 conda-meta
@@ -283,84 +283,81 @@ share
 x86_64-conda-linux-gnu
 ```
 
-The script *setupMe-on-host.sh* is copied from the image path into the new extended env subdir *myEnv*. 
+The script *setupMe-on-host.sh* is copied from the image path into the new extended env subdir *myEnv*.
 And the script can be sourced to **reuse** the extended env **in a new session**:
 
 ```shell
 % source /home/tmp/yesw/test-env/myEnv/setupMe-on-host.sh
 (base) % micromamba info
 
-                                           __
-          __  ______ ___  ____ _____ ___  / /_  ____ _
-         / / / / __ `__ \/ __ `/ __ `__ \/ __ \/ __ `/
-        / /_/ / / / / / / /_/ / / / / / / /_/ / /_/ /
-       / .___/_/ /_/ /_/\__,_/_/ /_/ /_/_.___/\__,_/
-      /_/
-
-
+       libmamba version : 1.5.7
+     micromamba version : 1.5.7
+           curl version : libcurl/8.5.0 OpenSSL/3.2.1 zlib/1.2.13 zstd/1.5.5 libssh2/1.11.0 nghttp2/1.58.0
+     libarchive version : libarchive 3.7.2 zlib/1.2.13 bz2lib/1.0.8 libzstd/1.5.5
+       envs directories : /home/tmp/yesw/test-env/myEnv/envs
+          package cache : /home/tmp/yesw/test-env/myEnv/pkgs
+                          /direct/usatlas+u/yesw2000/.mamba/pkgs
             environment : base (active)
            env location : /home/tmp/yesw/test-env/myEnv
       user config files : /usatlas/u/yesw2000/.mambarc
  populated config files : /usatlas/u/yesw2000/.mambarc
                           /usatlas/u/yesw2000/.condarc
-       libmamba version : 1.4.3
-     micromamba version : 1.4.3
-           curl version : libcurl/7.88.1 OpenSSL/3.1.0 zlib/1.2.13 zstd/1.5.2 libssh2/1.10.0 nghttp2/1.52.0
-     libarchive version : libarchive 3.6.2 zlib/1.2.13 bz2lib/1.0.8 libzstd/1.5.2
        virtual packages : __unix=0=0
                           __linux=3.10.0=0
                           __glibc=2.17=0
-                          __archspec=1=x86_64
+                          __archspec=1=x86_64-v4
+                          __cuda=11.6=0
                channels : https://conda.anaconda.org/conda-forge/linux-64
                           https://conda.anaconda.org/conda-forge/noarch
        base environment : /home/tmp/yesw/test-env/myEnv
                platform : linux-64
+
 (base) %
 ```
 
 ### Fast Way of Env Extension
 
-Normally, a fresh new environment is created using _micromamba_ (or _conda_) from scratch. 
-To enhance efficiency, conserve space, and save time, it's preferable to construct the new environment 
+Normally, a fresh new environment is created using _micromamba_ (or _conda_) from scratch.
+To enhance efficiency, conserve space, and save time, it's preferable to construct the new environment
 on top of an existing image environment. The following steps are implemented to facilitate this process.
 
-All subdirs and files under *$CONDA_PREFIX*, except some special files, are **sym-linked** to the new env directory. 
+All subdirs and files under *$CONDA_PREFIX*, except some special files, are **sym-linked** to the new env directory.
 So we could still reuse those packages in the image env without reinstallation.
 
-But there are about 7K subdirs and more than 60K files in the image *ml-base*. 
+But there are about 7K subdirs and more than 60K files in the image *ml-base*.
 There are more subdirs and files in other ML images. It would take quite a while (**a few minutes**).
 
-To speed up the above process, we can create all the sym-links in advance, and make an archive of them. 
+To speed up the above process, we can create all the sym-links in advance, and make an archive of them.
 Then just unpack the archive in the new env creation. It could reduce the time to **10s~20s**.
 
-Upon closer examination of the subdirectories and files, it becomes evident that a significant portion of them 
-originates from the Python **site-packages** directory. Nevertheless, establishing an environmental variable 
-such as **PYTHONPATH** to reference the Python site-packages within the image path is not feasible. 
-This is due to the fact that entries in the **PYTHONPATH** would take precedence in the Python `sys.path`, 
+Upon closer examination of the subdirectories and files, it becomes evident that a significant portion of them
+originates from the Python **site-packages** directory. Nevertheless, establishing an environmental variable
+such as **PYTHONPATH** to reference the Python site-packages within the image path is not feasible.
+This is due to the fact that entries in the **PYTHONPATH** would take precedence in the Python `sys.path`,
 consequently concealing packages with identical names in the new environment.
 
 Thankfully, the [pyvenv.cfg](https://python.readthedocs.io/en/latest/library/site.html?highlight=pyvenv%20cfg) file, 
 specifically designed for Python virtual environments, offers a solution to the above challenge:
 
 > Singularity> cat pyvenv.cfg 
-> 	home = /opt/conda/bin
+> 	home = /cvmfs/unpacked.cern.ch/.flat/8e/8e1e32f4a80a16356dde5c933638471b7d43f042ee163b8cdba36c8b504227f6/opt/conda/bin
 > 	**include-system-site-packages** = true
-> 	version = 3.8.17
-> Singularity> 
+> 	version = 3.9.19
+> Singularity>
 
 In the file, the parameter *include-system-site-packages* is set to true, and the `python3` 
 in the new environment directory is **sym-linked** to the `python3` from the image path.
 
 ```shell
 Singularity> ls -l `which python3`
-lrwxrwxrwx 1 yesw2000 usatlas 26 Aug 21 21:32 /home/tmp/yesw/test-contEnv/myEnv/bin/python3 -> ../baseEnv_dir/bin/python3
+lrwxrwxrwx 1 yesw2000 usatlas 26 Mar 29 11:24 /home/tmp/yesw/myEnv/bin/python3 -> ../baseEnv_dir/bin/python3
 
 Singularity> ls -l baseEnv_dir
-lrwxrwxrwx 1 yesw2000 usatlas 10 Aug 22 16:21 baseEnv_dir -> /opt/conda
+lrwxrwxrwx 1 yesw2000 usatlas 10 Apr 15 09:45 baseEnv_dir -> /opt/conda
 
 Singularity> python3 -s
-Python 3.8.17 | packaged by conda-forge | (default, Jun 16 2023, 07:06:00) 
-[GCC 11.4.0] on linux
+Python 3.9.19 | packaged by conda-forge | (main, Mar 20 2024, 12:50:21) 
+[GCC 12.3.0] on linux
 Type "help", "copyright", "credits" or "license" for more information.
 >>> import pprint
 >>> pp = pprint.PrettyPrinter(indent=4)
@@ -368,69 +365,71 @@ Type "help", "copyright", "credits" or "license" for more information.
 >>> pp.pprint(sys.path)
 [   '',
     '/home/tmp/yesw/test-contEnv/myEnv/lib',
-    '/home/tmp/yesw/test-contEnv/myEnv/lib/python3.8/site-packages',
-    '/home/tmp/yesw/test-contEnv/myEnv/baseEnv_dir/lib/python38.zip',
-    '/home/tmp/yesw/test-contEnv/myEnv/baseEnv_dir/lib/python3.8',
-    '/home/tmp/yesw/test-contEnv/myEnv/baseEnv_dir/lib/python3.8/lib-dynload',
-    '/home/tmp/yesw/test-contEnv/myEnv/baseEnv_dir/lib/python3.8/site-packages']
->>> 
+    '/home/tmp/yesw/test-contEnv/myEnv/lib/python3.9/site-packages',
+    '/home/tmp/yesw/test-env/myEnv/lib',
+    '/home/tmp/yesw/test-env/myEnv/lib/python3.9/site-packages',
+    '/home/tmp/yesw/test-contEnv/myEnv/baseEnv_dir/lib/python39.zip',
+    '/home/tmp/yesw/test-contEnv/myEnv/baseEnv_dir/lib/python3.9',
+    '/home/tmp/yesw/test-contEnv/myEnv/baseEnv_dir/lib/python3.9/lib-dynload',
+    '/home/tmp/yesw/test-contEnv/myEnv/baseEnv_dir/lib/python3.9/site-packages']
+>>>
 ```
 
 Four entries are present in the _sys.path_ that are associated with the `python3` from the image path:
 
-- *baseEnv_dir/lib/python38.zip*
-- *baseEnv_dir/lib/python3.8*
-- *baseEnv_dir/lib/python3.8/site-packages*
-- *baseEnv_dir/lib/python3.8/site-packages*
+- *baseEnv_dir/lib/python39.zip*
+- *baseEnv_dir/lib/python3.9*
+- *baseEnv_dir/lib/python3.9/site-packages*
+- *baseEnv_dir/lib/python3.9/site-packages*
 
 With the help of *pyvenv.cfg* and the pre-created archive of sym-links, a new extended environment could be created in less than one second.
 
 
 ## Using ML Images on Laptops
 
-The above section describes how to use the **read-only ML images on CVMFS**. 
+The above section describes how to use the **read-only ML images on CVMFS**.
 This section describes how to use the ML images in **writable mode** on laptops or destktops **without CVMFS**.
 
-A smart polyglot (shell+python) scipt [run-ml_container.sh](run-ml_container.sh) is developed, helping users to 
-list the available ML images, get the image info, and set up/run a container of the image. 
-Furthermore, running this script with no argument could reuse the previously created container or Singularity 
+A smart polyglot (shell+python) script [run-ml_container.sh](run-ml_container.sh) is developed, helping users to
+list the available ML images, get the image info, and set up/run a container of the image.
+Furthermore, running this script with no argument could reuse the previously created container or Singularity
 sandbox.
 
 ### Usage Help of This Script
 
-Just run **"source run-ml_container.sh -h"** or **"./run-ml-container.sh -h"** (if this script has been set to be executable), to print the following usage help (click the expand icon ▶ to collapse the help content):
+Just run **"source run-ml_container.sh -h"** or **"./run-ml-container.sh -h"** (if this script has been set to be executable),
+to print the following usage help (click the expand icon ▶ to collapse the help content):
 
 <details>
 <summary>run-ml_container.sh -h</summary>
 <blockquote><pre>
-usage: run-ml_container.sh [-h] [--rerun] [--version]
-                           {listImages,listPackages,printImageInfo,printMe,update,selfUpdate,setup,jupyter}   
-                           ...
+usage: run-ml_container.sh [options]
 
-positional arguments:
-  {listImages,listPackages,printImageInfo,printMe,update,selfUpdate,setup,jupyter}
-                        Default=setup
-    listImages          list all available ML images
-    listPackages        list packages in the given image
-    printImageInfo      print Image Info
-    printMe             print info of the setup container
-    update              update the container image
-    selfUpdate          update the script itself
-    setup               set up container
-    jupyter             run Jupyter with the container
+    positional arguments:
+    {listImages,listPackages,printImageInfo,printPullLimitInfo,printMe,update,selfUpdate,setup,jupyter}
+                          Default=setup
+      listImages          list all available ML images
+      listPackages        list packages in the given image
+      printImageInfo      print Image Info
+      printPullLimitInfo  print the pull limit info
+      printMe             print info of the setup container
+      update              update the container image
+      selfUpdate          update the script itself
+      setup               set up container
+      jupyter             run Jupyter with the container
 
-optional arguments:
-  -h, --help            show this help message and exit
-  --rerun               rerun the already setup container
-  --version             print out the script version
+  optional arguments:
+    -h, --help            show this help message and exit
+    --rerun               rerun the already setup container
+    -V, --version         print out the script version
 
-Examples:
+  Examples:
 
-  source run-ml_container.sh listImages
-  source run-ml_container.sh ml-base:centos7-python39
-  source run-ml_container.sh            # Empty arg to rerun the already setup container
-  source run-ml_container.sh setup ml-base:centos7-python39
-</pre></blockquote>
+    source run-ml_container.sh listImages
+    source run-ml_container.sh ml-base:centos7-python39
+    source run-ml_container.sh            # Empty arg to rerun the already setup container
+    source run-ml_container.sh setup ml-base:centos7-python39
+/pre></blockquote>
 </details>
 
 There are a few commands in this script:
@@ -446,29 +445,28 @@ There are a few commands in this script:
 
 Among them. the main and default command is "**setup**".
 
-You can **update the script iself** by running the command **selfUpdate**.
+You can **update the script itself** by running the command **selfUpdate**.
 
 ### Listing Packages in ML Images
 
 To list the packages installed in a given image, just run:
 
 ```shell
-$ source run-ml_container.sh listPackages ml-base
+$ source run-ml_container.sh listPackages ml-base:alma9-python39
 
-Found imageName= ml-base:centos7-python38
-      with the following installed pkgs:
-Name Version
-────────────────────────────────────────────────────────────────────────────
+Found imageName= ml-base:alma9-python39  with the following installed pkgs:
+alembic 1.13.1
+anyio 4.3.0
+argon2-cffi 23.1.0
+argon2-cffi-bindings 21.2.0
+arrow 1.3.0
+asdf 3.1.0
+[...]
+zstandard 0.22.0
+zstd 1.5.5
 _libgcc_mutex 0.1
 _openmp_mutex 4.5
 _py-xgboost-mutex 2.0
-anyio 4.0.0
-argon2-cffi 23.1.0
-[...]
-bzip2.x86_64 1.0.6-13.el7
-file.x86_64 5.11-37.el7
-git.x86_64 1.8.3.1-25.el7_9
-which.x86_64 2.20-7.el7
 ```
 
 ### Print Out the ML Image Info
@@ -476,19 +474,23 @@ which.x86_64 2.20-7.el7
 To get the size. last update date and SHA256 hash of a ML image, just run:
 
 ```shell
-$ source run-ml_container.sh getImageInfo ml-base
-Found image name= ml-base:centos7-python38
+$ source run-ml_container.sh printImageInfo ml-base:alma9-python39
+Found image name= ml-base:alma9-python39
 
- Image compressed size= 549449620
- Last  update UTC time= 2023-09-07T14:43:58.171805Z
-     Image SHA256 hash= sha256:78fe364bd448c48b476b344940b70c1b968c743c8aa4d2b0aa7351283d2d8270
+ Image compressed size= 607630023
+        Image raw size= 1884641257
+          imageVersion= 2024-04-04-r01
+ Last  update UTC time= 2024-04-04T18:59:07.700114Z
+     Image SHA256 hash= sha256:73aaf2e029b28eca50224b76e2dc6e2f623eb1eac6f014f6351f6adc82160bc0
 ```
 
 ### Container/Sandbox Setup
 
-The script supports 3 types of container commands: **podman**, **docker**, and **singularity**. The script will pick up one automatically based on the availability. You can specify an option to choose one. Run "**source run-ml_container.sh setup -h**" for more details.
+The script supports 5 types of container commands: **podman**, **docker**, **nerdctl**, and **apptainer/singularity**.
+The script will pick up one automatically based on the availability. You can specify an option to choose one.
+Run "**source run-ml_container.sh setup -h**" for more details.
 
-> usage: run-ml_container.sh setup [-h] [--podman | --docker | --singularity]
+> usage: run-ml_container.sh setup [-h] [--podman | --docker | --nerdctl | --apptainer | --singularity]
 >                                  [-f]  \<ImageName\>
 > 
 > positional arguments:
@@ -498,81 +500,76 @@ The script supports 3 types of container commands: **podman**, **docker**, and *
 >   -h, --help     show this help message and exit
 >   --podman       Use podman to the container
 >   --docker       Use docker to the container
+>   --nerdctl      Use nerdctl to the container
+>   --apptainer    Use apptainer to the container
 >   --singularity  Use singularity to the container
 >   -f, --force    Force to override the existing container/sandbox
 > 
 > Examples:
 > 
->   source run-ml_container.sh ml-base
->   source run-ml_container.sh --sing ml-base
+>   source run-ml_container.sh ml-base:alma9-python39
+>   source run-ml_container.sh --sing ml-base:alma9-python39
 
 #### Container Setup Through `podman`
 
 On a computer with `podman` set up, the script will choose `podman` to run ML containers.
 
 ```shell
-$ ./run-ml_container.sh ml-base
-Found the image name= ml-base:centos7-python38  with the dockerPath= docker.io/yesw2000/ml-base:centos7-python38
-Trying to pull docker.io/yesw2000/ml-base:centos7-python38...
+$ source run-ml_container.sh ml-base:alma9-python39
+Found the image name= ml-base:alma9-python39  with the dockerPath= docker.io/yesw2000/ml-base:alma9-python39
+Trying to pull docker.io/yesw2000/ml-base:alma9-python39...
 Getting image source signatures
-Copying blob 7d00c655bf55 done  
-Copying blob 2ea4b90db453 done  
-Copying blob b0dd0262d20c done  
-Copying blob 7d00c655bf55 done  
-Copying blob 2ea4b90db453 done  
-Copying blob b0dd0262d20c done  
-Copying blob 777139c0ccd6 done  
-Copying blob 64a6649957f7 done  
-Copying blob 5282a0ff22f7 done  
-Copying blob 074e2b1f4561 done  
-Copying blob d93432e122ad done  
-Copying blob 2a7cf6658beb done  
-Copying blob cab7d2991b3a done  
-Copying blob d166ab952b1c done  
-Copying blob 2be4cd2151f6 done  
-Copying blob 17d4a1de8ca7 done  
-Copying blob 0399ab42a564 done  
-Copying blob 92ce03eaefb1 done  
-Copying blob 679007b0c85b done  
-Copying blob 7a8b17a36c6d done  
-Copying config 808e3792ff done  
+Copying blob 6097345d637a done
+Copying blob 7a937440caca done
+Copying blob d933cb84e3aa done
+Copying blob 28130cb29ede done
+Copying blob 530edc475e19 done
+Copying blob c7f7646ff892 done
+Copying blob 4c85af436900 done
+Copying blob 3acd9b065b0a done
+Copying blob f888eaa67bc6 done
+Copying blob 9d98ec5991a7 done
+Copying blob 16b7ec60d120 done
+Copying blob 3331c62c6de8 done
+Copying blob 5c70e679fbad done
+Copying blob fc30790884f5 done
+Copying blob 56c2bc116035 done
+Copying blob 80b76dfb172b done
+Copying blob c06b11ec7568 done
+Copying blob ee4d109e1b58 done
+Copying blob 2ba11ebdb71e done
+Copying blob 5bf4205fcecd done
+Copying config 8e1e32f4a8 done
 Writing manifest to image destination
-Storing signatures
-808e3792ff76a2870ff3bffeefc38bf062f56d1f3a2cc680825919c4b7b5bbb8
+8e1e32f4a80a16356dde5c933638471b7d43f042ee163b8cdba36c8b504227f6
 
 To reuse the same container next time, just run
 
-         source runMe-here.sh 
- or 
-         source ./run-ml_container.sh
+         source runML-here.sh
+ or
+         source run-ml_container.sh
 
-podman exec -it yesw_ml-base_centos7-python38 /bin/bash
+podman exec -it yesw_ml-base_alma9-python39 /bin/bash
 
-
-For the content in this container,
-  please read the file /list-of-pkgs-inside.txt
-
-To install new pkg(s), run "micromamba install pkg1 [pkg2 ...]"
-(base) [root@e2a5269c74dd yesw]# 
+root@9c33313100b4:[1]%
 ```
 
 After entering the container, it prints out the guide:
 - how to reuse the same container next time.
 - how to install new pkg(s) in the container.
 
-To **reuse the container** in a new sesion, simply run "**runMe-here.sh**" with no argument.
+To **reuse the container** in a new session, simply run "**runMe-here.sh**" with no argument.
 
 ```shell
-$ ./run-ml_container.sh
+$ source run-ml_container.sh
 
-podman exec -it yesw_ml-base_centos7-python38 /bin/bash
-
+podman exec -it yesw_ml-base_alma9-python39 /bin/bash
 
 For the content in this container,
   please read the file /list-of-pkgs-inside.txt
 
 To install new pkg(s), run "micromamba install pkg1 [pkg2 ...]"
-(base) [root@e2a5269c74dd yesw]# 
+root@9c33313100b4:[1]%
 ```
 
 Inside the container, to **install a new package** *dask*, just run "*micromamba install -y dask*" (click the expand icon ▶ for details).
@@ -581,227 +578,36 @@ Inside the container, to **install a new package** *dask*, just run "*micromamba
 <summary>micromamba install -y dask</summary>
 <blockquote><pre>
 (base) [root@e2a5269c74dd yesw]# micromamba install -y dask
+conda-forge/noarch                                  14.3MB @  19.6MB/s  0.8s
+    conda-forge/linux-64                                33.7MB @  29.0MB/s  1.4s
 
-                                           __
-          __  ______ ___  ____ _____ ___  / /_  ____ _
-         / / / / __ `__ \/ __ `/ __ `__ \/ __ \/ __ `/
-        / /_/ / / / / / / /_/ / / / / / / /_/ / /_/ /
-       / .___/_/ /_/ /_/\__,_/_/ /_/ /_/_.___/\__,_/
-      /_/
-
-conda-forge/noarch                                  14.2MB @   2.3MB/s  7.2s
-conda-forge/linux-64                                34.4MB @   2.6MB/s 16.1s
-
-Pinned packages:
-  - python 3.8.*
+    Pinned packages:
+    - python 3.9.*
 
 
-Transaction
+  Transaction
 
-  Prefix: /opt/conda
+    Prefix: /opt/conda
 
-  Updating specs:
+    Updating specs:
 
-   - dask
-
-
-  Package                    Version  Build               Channel          Size
-─────────────────────────────────────────────────────────────────────────────────
-  Install:
-─────────────────────────────────────────────────────────────────────────────────
-
-  + aws-c-auth                 0.7.3  he2921ad_3          conda-forge     102kB
-  + aws-c-cal                  0.6.2  hc309b26_1          conda-forge      51kB
-  + aws-c-common               0.9.0  hd590300_0          conda-forge     198kB
-  + aws-c-compression         0.2.17  h4d4d85c_2          conda-forge      19kB
-  + aws-c-event-stream         0.3.2  h2e3709c_0          conda-forge      54kB
-  + aws-c-http                0.7.12  hc865f51_1          conda-forge     194kB
-  + aws-c-io                 0.13.32  h1a03231_3          conda-forge     154kB
-  + aws-c-mqtt                 0.9.6  h3a0376c_0          conda-forge     164kB
-  + aws-c-s3                  0.3.17  h1678ad6_0          conda-forge      86kB
-  + aws-c-sdkutils            0.1.12  h4d4d85c_1          conda-forge      53kB
-  + aws-checksums             0.1.17  h4d4d85c_1          conda-forge      50kB
-  + aws-crt-cpp               0.23.1  hf7d0843_2          conda-forge     324kB
-  + aws-sdk-cpp             1.11.156  he6c2984_2          conda-forge       3MB
-  + bokeh                      3.1.1  pyhd8ed1ab_0        conda-forge       6MB
-  + c-ares                    1.19.1  hd590300_0          conda-forge     113kB
-  + cloudpickle                2.2.1  pyhd8ed1ab_0        conda-forge      28kB
-  + cytoolz                   0.12.2  py38h01eb140_0      conda-forge     374kB
-  + dask                    2023.5.0  pyhd8ed1ab_0        conda-forge       7kB
-  + dask-core               2023.5.0  pyhd8ed1ab_0        conda-forge     845kB
-  + distributed             2023.5.0  pyhd8ed1ab_0        conda-forge     768kB
-  + fsspec                  2023.9.1  pyh1a96a4e_0        conda-forge     124kB
-  + gflags                     2.2.2  he1b5a44_1004       conda-forge     117kB
-  + glog                       0.6.0  h6f12383_0          conda-forge     114kB
-  + keyutils                   1.6.1  h166bdaf_0          conda-forge     118kB
-  + krb5                      1.21.2  h659d440_0          conda-forge       1MB
-  + libabseil             20230802.1  cxx17_h59595ed_0    conda-forge       1MB
-  + libarrow                  13.0.0  h1935d02_4_cpu      conda-forge      28MB
-  + libcrc32c                  1.1.2  h9c3ff4c_0          conda-forge      20kB
-  + libcurl                    8.3.0  hca28451_0          conda-forge     388kB
-  + libedit             3.1.20191231  he28a2e2_2          conda-forge     124kB
-  + libev                       4.33  h516909a_1          conda-forge     106kB
-  + libevent                  2.1.12  hf998b51_1          conda-forge     427kB
-  + libgoogle-cloud           2.12.0  h8d7e28b_2          conda-forge      46MB
-  + libgrpc                   1.57.0  ha4d0f93_1          conda-forge       6MB
-  + libnghttp2                1.52.0  h61bc06f_0          conda-forge     622kB
-  + libnuma                   2.0.16  h0b41bf4_1          conda-forge      41kB
-  + libprotobuf               4.23.4  hf27288f_6          conda-forge       3MB
-  + libssh2                   1.11.0  h0841786_0          conda-forge     271kB
-  + libthrift                 0.19.0  h8fd135c_0          conda-forge     410kB
-  + libutf8proc                2.8.0  h166bdaf_0          conda-forge     101kB
-  + locket                     1.0.0  pyhd8ed1ab_0        conda-forge       8kB
-  + msgpack-python             1.0.5  py38hfbd4bf9_0      conda-forge      87kB
-  + orc                        1.9.0  h52d3b3c_2          conda-forge       1MB
-  + partd                      1.4.0  pyhd8ed1ab_1        conda-forge      21kB
-  + pyarrow                   13.0.0  py38h96a5bb7_4_cpu  conda-forge       4MB
-  + rdma-core                   28.9  h59595ed_1          conda-forge       4MB
-  + re2                   2023.03.02  h8c504da_0          conda-forge     201kB
-  + s2n                       1.3.51  h06160fa_0          conda-forge     375kB
-  + snappy                    1.1.10  h9fff704_0          conda-forge      39kB
-  + sortedcontainers           2.4.0  pyhd8ed1ab_0        conda-forge      26kB
-  + tblib                      2.0.0  pyhd8ed1ab_0        conda-forge      17kB
-  + toolz                     0.12.0  pyhd8ed1ab_0        conda-forge      49kB
-  + ucx                       1.14.1  h64cca9d_5          conda-forge      15MB
-  + xyzservices             2023.7.0  pyhd8ed1ab_0        conda-forge      36kB
-  + zict                       3.0.0  pyhd8ed1ab_0        conda-forge      36kB
-
-  Upgrade:
-─────────────────────────────────────────────────────────────────────────────────
-
-  - zstandard                 0.19.0  py38ha98ab4e_2      conda-forge     394kB
-  + zstandard                 0.21.0  py38ha98ab4e_0      conda-forge     406kB
-  - zstd                       1.5.2  hfc55251_7          conda-forge     431kB
-  + zstd                       1.5.5  hfc55251_0          conda-forge     545kB
-
-  Summary:
-
-  Install: 55 packages
-  Upgrade: 2 packages
-
-  Total download: 127MB
-
-─────────────────────────────────────────────────────────────────────────────────
+     - dask
 
 
+    Package                       Version  Build               Channel           Size
+  ─────────────────────────────────────────────────────────────────────────────────────
+    Install:
+  ─────────────────────────────────────────────────────────────────────────────────────
 
-Transaction starting
-toolz                                               49.1kB @ 649.5kB/s  0.1s
-cloudpickle                                         27.9kB @ 312.1kB/s  0.1s
-sortedcontainers                                    26.3kB @ 292.5kB/s  0.1s
-libutf8proc                                        101.1kB @ 748.5kB/s  0.0s
-tblib                                               16.6kB @ 100.5kB/s  0.2s
-locket                                               8.2kB @  43.9kB/s  0.2s
-gflags                                             116.5kB @ 570.5kB/s  0.0s
-dask-core                                          844.9kB @   3.9MB/s  0.1s
-libev                                              106.2kB @ 456.3kB/s  0.0s
-libcrc32c                                           20.4kB @  79.2kB/s  0.1s
-libthrift                                          410.4kB @   1.5MB/s  0.1s
-glog                                               114.3kB @ 376.1kB/s  0.0s
-aws-c-cal                                           50.8kB @ 153.3kB/s  0.1s
-rdma-core                                            3.7MB @  11.0MB/s  0.1s
-aws-c-io                                           153.9kB @ 437.3kB/s  0.0s
-aws-c-mqtt                                         163.7kB @ 426.1kB/s  0.0s
-aws-c-event-stream                                  53.8kB @ 120.2kB/s  0.1s
-aws-sdk-cpp                                          3.4MB @   7.6MB/s  0.1s
-fsspec                                             123.8kB @ 248.1kB/s  0.1s
-xyzservices                                         36.3kB @  72.7kB/s  0.1s
-ucx                                                 15.2MB @  30.4MB/s  0.2s
-distributed                                        767.8kB @   1.4MB/s  0.2s
-snappy                                              38.9kB @  71.4kB/s  0.0s
-aws-c-common                                       197.6kB @ 361.4kB/s  0.0s
-libevent                                           427.4kB @ 695.2kB/s  0.1s
-cytoolz                                            374.1kB @ 601.0kB/s  0.1s
-aws-checksums                                       50.0kB @  77.6kB/s  0.1s
-libnuma                                             41.1kB @  59.7kB/s  0.1s
-aws-c-s3                                            85.9kB @ 124.2kB/s  0.0s
-orc                                                  1.0MB @   1.5MB/s  0.1s
-aws-c-http                                         193.9kB @ 272.8kB/s  0.1s
-libabseil                                            1.3MB @   1.7MB/s  0.1s
-msgpack-python                                      86.8kB @ 112.4kB/s  0.1s
-pyarrow                                              4.1MB @   5.2MB/s  0.1s
-partd                                               20.7kB @  26.5kB/s  0.1s
-aws-c-compression                                   19.1kB @  23.4kB/s  0.0s
-libedit                                            123.9kB @ 146.5kB/s  0.1s
-krb5                                                 1.4MB @   1.6MB/s  0.1s
-s2n                                                374.7kB @ 410.5kB/s  0.1s
-zstandard                                          405.7kB @ 418.3kB/s  0.1s
-libgrpc                                              6.0MB @   5.9MB/s  0.2s
-bokeh                                                5.9MB @   5.7MB/s  0.2s
-aws-c-auth                                         101.7kB @  93.9kB/s  0.1s
-libnghttp2                                         622.4kB @ 570.0kB/s  0.2s
-dask                                                 7.4kB @   6.5kB/s  0.1s
-libssh2                                            271.1kB @ 238.0kB/s  0.1s
-libcurl                                            388.3kB @ 330.4kB/s  0.1s
-c-ares                                             113.4kB @  93.3kB/s  0.1s
-aws-c-sdkutils                                      53.1kB @  43.7kB/s  0.1s
-libarrow                                            27.8MB @  22.9MB/s  0.4s
-zict                                                36.3kB @  29.1kB/s  0.0s
-zstd                                               545.2kB @ 433.1kB/s  0.0s
-keyutils                                           117.8kB @  93.5kB/s  0.0s
-libprotobuf                                          2.6MB @   2.0MB/s  0.0s
-aws-crt-cpp                                        324.2kB @ 245.0kB/s  0.1s
-libgoogle-cloud                                     46.2MB @  29.5MB/s  0.4s
-re2                                                201.2kB @  19.7kB/s 10.1s
-Linking locket-1.0.0-pyhd8ed1ab_0
-Linking cloudpickle-2.2.1-pyhd8ed1ab_0
-Linking sortedcontainers-2.4.0-pyhd8ed1ab_0
-Linking tblib-2.0.0-pyhd8ed1ab_0
-Linking toolz-0.12.0-pyhd8ed1ab_0
-Linking zict-3.0.0-pyhd8ed1ab_0
-Linking fsspec-2023.9.1-pyh1a96a4e_0
-Linking xyzservices-2023.7.0-pyhd8ed1ab_0
-Linking partd-1.4.0-pyhd8ed1ab_1
-Linking bokeh-3.1.1-pyhd8ed1ab_0
-Linking dask-core-2023.5.0-pyhd8ed1ab_0
-Changing zstd-1.5.2-hfc55251_7 ==> zstd-1.5.5-hfc55251_0
-Linking msgpack-python-1.0.5-py38hfbd4bf9_0
-Linking libutf8proc-2.8.0-h166bdaf_0
-Linking re2-2023.03.02-h8c504da_0
-Linking snappy-1.1.10-h9fff704_0
-Linking libevent-2.1.12-hf998b51_1
-Linking libabseil-20230802.1-cxx17_h59595ed_0
-Linking c-ares-1.19.1-hd590300_0
-Linking libcrc32c-1.1.2-h9c3ff4c_0
-Linking aws-c-common-0.9.0-hd590300_0
-Linking s2n-1.3.51-h06160fa_0
-Linking gflags-2.2.2-he1b5a44_1004
-Linking libssh2-1.11.0-h0841786_0
-Linking keyutils-1.6.1-h166bdaf_0
-Linking libev-4.33-h516909a_1
-Linking libedit-3.1.20191231-he28a2e2_2
-Linking libnuma-2.0.16-h0b41bf4_1
-Linking rdma-core-28.9-h59595ed_1
-Linking cytoolz-0.12.2-py38h01eb140_0
-Changing zstandard-0.19.0-py38ha98ab4e_2 ==> zstandard-0.21.0-py38ha98ab4e_0
-Linking libthrift-0.19.0-h8fd135c_0
-Linking libprotobuf-4.23.4-hf27288f_6
-Linking aws-c-compression-0.2.17-h4d4d85c_2
-Linking aws-c-cal-0.6.2-hc309b26_1
-Linking aws-c-sdkutils-0.1.12-h4d4d85c_1
-Linking aws-checksums-0.1.17-h4d4d85c_1
-Linking glog-0.6.0-h6f12383_0
-Linking libnghttp2-1.52.0-h61bc06f_0
-Linking krb5-1.21.2-h659d440_0
-Linking ucx-1.14.1-h64cca9d_5
-Linking orc-1.9.0-h52d3b3c_2
-Linking libgrpc-1.57.0-ha4d0f93_1
-Linking aws-c-io-0.13.32-h1a03231_3
-Linking libcurl-8.3.0-hca28451_0
-Linking aws-c-http-0.7.12-hc865f51_1
-Linking aws-c-event-stream-0.3.2-h2e3709c_0
-Linking libgoogle-cloud-2.12.0-h8d7e28b_2
-Linking aws-c-auth-0.7.3-he2921ad_3
-Linking aws-c-mqtt-0.9.6-h3a0376c_0
-Linking aws-c-s3-0.3.17-h1678ad6_0
-Linking aws-crt-cpp-0.23.1-hf7d0843_2
-Linking aws-sdk-cpp-1.11.156-he6c2984_2
-Linking libarrow-13.0.0-h1935d02_4_cpu
-Linking pyarrow-13.0.0-py38h96a5bb7_4_cpu
-Linking distributed-2023.5.0-pyhd8ed1ab_0
-Linking dask-2023.5.0-pyhd8ed1ab_0
+    + locket                        1.0.0  pyhd8ed1ab_0        conda-forge     Cached
+    + zict                          3.0.0  pyhd8ed1ab_0        conda-forge     Cached
+  [...]
+Linking distributed-2024.4.1-pyhd8ed1ab_0
+  Linking pyarrow-hotfix-0.6-pyhd8ed1ab_0
+  Linking dask-expr-1.0.11-pyhd8ed1ab_0
+  Linking dask-2024.4.1-pyhd8ed1ab_0
 
-Transaction finished
+  Transaction finished
 
 To activate this environment, use:
 
@@ -811,84 +617,42 @@ Or to execute a single command in this environment, use:
 
     micromamba run -n base mycommand
 
-(base) [root@e2a5269c74dd yesw]# 
+(base) [root@e2a5269c74dd yesw]#
 
 </pre></blockquote>
 </details>
 
-The command **printMe** could help print out the information about the built container and the corresponding image. Just run "**./run-ml_container.sh printMe**":
+The command **printMe** could help print out the information about the built container and the corresponding image.
+Just run "**./run-ml_container.sh printMe**":
 
 ```shell
-$ ./run-ml_container.sh printMe
+$ source ./run-ml_container.sh printMe
 The image/container used in the current work directory:
 {   'contCmd': 'podman',
-    'contName': 'yesw_ml-base_centos7-python38',
-    'dockerPath': 'docker.io/yesw2000/ml-base:centos7-python38',
-    'imageCompressedSize': '549449620',
-    'imageDigest': 'sha256:78fe364bd448c48b476b344940b70c1b968c743c8aa4d2b0aa7351283d2d8270',
-    'imageLastUpdate': '2023-09-07T14:43:58.171805Z',
-    'imageName': 'ml-base:centos7-python38'}
+    'contName': 'yesw2000_ml-base_alma9-python39',
+    'dockerPath': 'docker.io/yesw2000/ml-base:alma9-python39',
+    'imageCompressedSize': '607630023',
+    'imageDigest': 'sha256:73aaf2e029b28eca50224b76e2dc6e2f623eb1eac6f014f6351f6adc82160bc0',
+    'imageLastUpdate': '2024-04-04T18:59:07.700114Z',
+    'imageName': 'ml-base:alma9-python39'}
 
 The following additional pkgs and their dependencies are installed
 ['dask']
 ```
 
-#### Container Setup Through `docker`
-
-If a computer has `docker`, but no `podman`, running "**./run-ml_container.sh ml-base**" will create a container of the image *ml-base*, and enter into the created container:
-
-```shell
-$ ./run-ml_container.sh ml-base
-Found the image name= ml-base:centos7-python38  with the dockerPath= docker.io/yesw2000/ml-base:centos7-python38
-centos7-python38: Pulling from yesw2000/ml-base
-777139c0ccd6: Already exists 
-b0dd0262d20c: Pull complete 
-64a6649957f7: Pull complete 
-7d00c655bf55: Pull complete 
-5282a0ff22f7: Pull complete 
-2ea4b90db453: Pull complete 
-074e2b1f4561: Pull complete 
-d93432e122ad: Pull complete 
-2a7cf6658beb: Pull complete 
-cab7d2991b3a: Pull complete 
-d166ab952b1c: Pull complete 
-2be4cd2151f6: Pull complete 
-17d4a1de8ca7: Pull complete 
-0399ab42a564: Pull complete 
-92ce03eaefb1: Pull complete 
-679007b0c85b: Pull complete 
-7a8b17a36c6d: Pull complete 
-Digest: sha256:78fe364bd448c48b476b344940b70c1b968c743c8aa4d2b0aa7351283d2d8270
-Status: Downloaded newer image for yesw2000/ml-base:centos7-python38
-docker.io/yesw2000/ml-base:centos7-python38
-
-To reuse the same container next time, just run
-
-         source runMe-here.sh 
- or 
-         source ./run-ml_container.sh
-
-docker exec -it yesw_ml-base_centos7-python38 /bin/bash
-
-
-For the content in this container,
-  please read the file /list-of-pkgs-inside.txt
-
-To install new pkg(s), run "micromamba install pkg1 [pkg2 ...]"
-(base) [root@17ae52b4e5d4 yesw]#
-```
-
 #### Container Setup Through `singularity`
 
-If a computer does not have either `podman`, or `docker`, and `singularity` is installed, or specifying the option `--singularity`, 
-the script will build (which would take a while) a Singularity sandbox for the given ML image, and run a container with the built sandbox. 
-Just run "./run-ml_container.sh --sing ml-base" (click the expand icon ▶ for details)
+If a computer does not have either `podman`, or `docker`, and `singularity` is installed,
+or specifying the option `--singularity`,
+the script will build (which would take a while) a Singularity sandbox for the given ML image,
+and run a container with the built sandbox.
+Just run "./run-ml_container.sh --sing ml-base:alma9-python39" (click the expand icon ▶ for details)
 
 <details>
-<summary>./run-ml_container.sh --sing ml-base</summary>
+<summary>./run-ml_container.sh --sing ml-base:alma9-python39</summary>
 <blockquote><pre>
-$ source ./run-ml_container.sh --sing ml-base                     
-Found the image name= ml-base:centos7-python38  with the dockerPath= docker.io/yesw2000/ml-base:centos7-python38
+$ source ./run-ml_container.sh --sing ml-base:alma9-python39
+Found the image name= ml-base:alma9-python39  with the dockerPath= docker.io/yesw2000/ml-base:alma9-python39
 
 Building Singularity sandbox
 
@@ -941,7 +705,7 @@ Storing signatures
 2023/09/21 11:12:22  info unpack layer: sha256:7a8b17a36c6d92c7da8f2f18ceaee093286570c1c09d6b4da9a1a684f37e067a
 WARNING: The --fix-perms option modifies the filesystem permissions on the resulting container.
 INFO:    Creating sandbox directory...
-INFO:    Build complete: singularity/ml-base:centos7-python38
+INFO:    Build complete: singularity/ml-base:alma9-python39
 
 To reuse the same container next time, just run
 
@@ -949,7 +713,7 @@ To reuse the same container next time, just run
  or 
          source ./run-ml_container.sh
 
-singularity run -w -H /home/yesw singularity/ml-base:centos7-python38
+singularity run -w -H /home/yesw singularity/ml-base:alma9-python39
 
 WARNING: nv files may not be bound with --writable
 WARNING: Skipping mount /cvmfs [binds]: /cvmfs doesn't exist in container
@@ -976,9 +740,9 @@ After starting a container of the built sandbox in **writable mode**, it also pr
 Similarly, run "**./run-ml_container.sh**" with no argument to **reuse the sandbox** in a new session.
 
 ```shell
-$ ./run-ml_container.sh               
+$ ./run-ml_container.sh
 
-singularity run -w -H /home/yesw singularity/ml-base:centos7-python38
+singularity run -w -H /home/yesw singularity/ml-base:alma9-python39
 
 WARNING: nv files may not be bound with --writable
 WARNING: Skipping mount /cvmfs [binds]: /cvmfs doesn't exist in container
@@ -1003,12 +767,12 @@ To print out the information about the built container and the corresponding ima
 $ ./run-ml_container.sh printMe
 The image/container used in the current work directory:
 {   'contCmd': 'singularity',
-    'dockerPath': 'docker.io/yesw2000/ml-base:centos7-python38',
+    'dockerPath': 'docker.io/yesw2000/ml-base:alma9-python39',
     'imageCompressedSize': '549449620',
     'imageDigest': 'sha256:78fe364bd448c48b476b344940b70c1b968c743c8aa4d2b0aa7351283d2d8270',
     'imageLastUpdate': '2023-09-07T14:43:58.171805Z',
-    'imageName': 'ml-base:centos7-python38',
-    'sandboxPath': 'singularity/ml-base:centos7-python38'}
+    'imageName': 'ml-base:alma9-python39',
+    'sandboxPath': 'singularity/ml-base:alma9-python39'}
 ```
 ### Run Jupyter Locally with the Setup ML Container
 
@@ -1017,7 +781,7 @@ After having set up a ML container, you can start up a Jupyter lab with the set 
 ```shell
 $ ./run-ml_container.sh jupyter
 
-docker exec -it -u 1000:1000 -e USER=yesw2000 yesw2000_ml-base_centos7-python39 jupyter lab --ip 0.0.0.0      
+docker exec -it -u 1000:1000 -e USER=yesw2000 yesw2000_ml-base_alma9-python39 jupyter lab --ip 0.0.0.0      
 
 [...]
 [C 2023-12-07 19:35:35.901 ServerApp]
