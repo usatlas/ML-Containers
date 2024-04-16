@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-04-09-r01
+# version=2024-04-16-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -8,40 +8,40 @@ ret=0
 
 sourced=0
 if [ -n "$ZSH_VERSION" ]; then
-   case $ZSH_EVAL_CONTEXT in *:file) sourced=1; esac
+    case $ZSH_EVAL_CONTEXT in *:file) sourced=1; esac
 else
-   case ${0##*/} in bash|-bash|zsh|-zsh) sourced=1; esac
+    case ${0##*/} in bash|-bash|zsh|-zsh) sourced=1; esac
 fi
 
 mySetup=runML-here.sh
 
-if [[ -e $mySetup && ( $# -eq 0 || "$@" =~ "--rerun" ) ]]; then
-   source $mySetup
-   ret=$?
+if [[ -e $mySetup && ( $# -eq 0 || "$*" =~ "--rerun" ) ]]; then
+    source $mySetup
+    ret=$?
 elif [[ $# -eq 1 && "$1" =~ ^[Jj]upyter$ ]]; then
-   source $mySetup jupyter
-   ret=$?
+    source $mySetup jupyter
+    ret=$?
 else
-   if [ "X" != "X$BASH_SOURCE" ]; then
-      shopt -s expand_aliases
-   fi
-   alias py_readlink="python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))'"
-   alias py_stat="python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))'"
-   myDir=$(dirname $myScript)
-   myDir=$(py_readlink $myDir)
-   now=$(date +"%s")
-   python3 -B -I -S "$myScript" --shellFilename $mySetup "$@"
-   ret=$?
-   if [ -e $mySetup ]; then
-      # check if the setup script is newly created
-      mtime_setup=$(py_stat $mySetup)
-      if [ "$(( $mtime_setup - $now ))" -gt 0 ]; then
-         echo -e "\nTo reuse the same container next time, just run"
-         echo -e "\n\t source $mySetup \n or \n\t source $myScript"
-         sleep 3
-         source $mySetup
-      fi
-   fi
+    if [ "X" != "X$BASH_SOURCE" ]; then
+        shopt -s expand_aliases
+    fi
+    alias py_readlink="python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))'"
+    alias py_stat="python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))'"
+    myDir=$(dirname $myScript)
+    myDir=$(py_readlink $myDir)
+    now=$(date +"%s")
+    python3 -B -I -S "$myScript" --shellFilename $mySetup "$@"
+    ret=$?
+    if [ -e $mySetup ]; then
+        # check if the setup script is newly created
+        mtime_setup=$(py_stat $mySetup)
+        if [ "$(( $mtime_setup - $now ))" -gt 0 ]; then
+            echo -e "\nTo reuse the same container next time, just run"
+            echo -e "\n\t source $mySetup \n or \n\t source $myScript"
+            sleep 2
+            source $mySetup
+        fi
+    fi
 fi
 [[ $sourced == 1 ]] && return $ret || exit $ret
 '''
@@ -122,10 +122,8 @@ def set_default_subparser(parser, default_subparser, index_action=1):
     subparser_found = False
     for arg in sys.argv[1:]:
         if arg in [
-            '-h',
-            '--help',
-            '-V',
-                '--version']:  # global help or version, no default subparser
+                '-h', '--help',
+                '-V', '--version']:  # global help or version, no default subparser
             break
     else:
         for x in parser._subparsers._actions:
@@ -294,6 +292,7 @@ def getImageInfo(args, imageFullName=None, printOut=True):
                 print("          imageVersion=", json_tag['imageVersion'])
             print(" Last  update UTC time=", lastUpdate)
             print("     Image SHA256 hash=", imageDigest)
+            sys.exit(0)
         else:
             if "imageRawSize" in json_tag:
                 return {
@@ -829,7 +828,7 @@ def update(args):
     pkgs, channels = listNewPkgs(contCmd, contNamePath, linesCondaHistory)
 
     if contCmd == 'singularity' or contCmd == 'apptainer':
-        build_sandbox(contNamePath, dockerPath, force=True)
+        build_sandbox(contCmd, contNamePath, dockerPath, force=True)
         write_sandboxSetup(args.shellFilename, myImageName, dockerPath,
                            contCmd, contNamePath, runOpt)
     else:
@@ -859,7 +858,7 @@ def get_docker_hub_token(repo, username=None):
     return token
 
 
-def getPullLimitInfo(args):
+def getPullLimit(args):
     """
     Get the pull limit information for anonymous user or a given username
     """
@@ -868,7 +867,6 @@ def getPullLimitInfo(args):
     token = get_docker_hub_token(repo, username)
     url_digest = "https://registry-1.docker.io/v2/" + repo + "/manifests/latest"
     req = Request(url_digest, method="HEAD")
-    # req.add_header('Accept', 'application/vnd.oci.image.manifest.v1+json')
     req.add_header('Authorization', 'Bearer %s' % token)
     headers = getUrlHeaders(req)
 
@@ -892,6 +890,8 @@ def getImageLabels(imageName, tag):
 
     if imageName.find('/') < 0:
         repo = 'yesw2000/' + imageName
+    else:
+        repo = imageName
     token = get_docker_hub_token(repo)
 
     url_digest = "https://registry-1.docker.io/v2/%s/manifests/%s" % (
@@ -968,16 +968,16 @@ def main():
     sp_printImageInfo.add_argument('name', metavar='<ImageName>')
     sp_printImageInfo.set_defaults(func=getImageInfo)
 
-    sp_printPullLimitInfo = sp.add_parser(
-        'printPullLimitInfo',
-        help='print the pull limit info',
+    sp_printPullLimit = sp.add_parser(
+        'printPullLimit',
+        help='print the pull limit info on the Docker Hub',
         description='print out the pull limit info on the Docker Hub, for anonymous or a given user')
-    sp_printPullLimitInfo.add_argument(
+    sp_printPullLimit.add_argument(
         'username',
         nargs='?',
         metavar='<UserName>',
         help="A DockerHub name, otherwise anonymous user will be applied")
-    sp_printPullLimitInfo.set_defaults(func=getPullLimitInfo)
+    sp_printPullLimit.set_defaults(func=getPullLimit)
 
     sp_printMe = sp.add_parser(
         'printMe',
@@ -990,10 +990,8 @@ def main():
         help='update the container image',
         description='check if the container/sandbox here is up-to-date, update it needed and -f applied')
     sp_update.add_argument(
-        '-f',
-        '--force',
-        action='store_true',
-        default=False,
+        '-f', '--force',
+        action='store_true', default=False,
         help="Force to override the existing container/sandbox")
     sp_update.set_defaults(func=update)
 
@@ -1013,16 +1011,12 @@ def main():
                                action="store_const", const="%s" % cmd,
                                help="Use %s to the container" % cmd)
     sp_setup.add_argument(
-        '-f',
-        '--force',
-        action='store_true',
-        default=False,
+        '-f', '--force',
+        action='store_true', default=False,
         help="Force to override the existing container/sandbox")
     sp_setup.add_argument(
-        '-B',
-        '--volume',
-        nargs='?',
-        metavar='path[,srcPath:targePath]',
+        '-B', '--volume',
+        nargs='?', metavar='path[,srcPath:targePath]',
         help="Additional path(s) delimited by comma, to be mounted into the container")
     sp_setup.add_argument(
         'name',
