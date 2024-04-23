@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-04-12-r01
+# version=2024-04-23-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -52,6 +52,7 @@ fi
 [[ $sourced == 1 ]] && return $ret || exit $ret
 '''
 
+
 import getpass
 import os
 import sys
@@ -83,37 +84,36 @@ URL_API_SELF = "https://api.github.com/repos/%s/commits?path=%s&per_page=100" % 
 CONTAINER_CMDS = ["podman", "docker", "nerdctl", "apptainer", "singularity"]
 ContCmds_available = []
 
-URL_GITLAB = "https://gitlab.cern.ch/api/v4/projects"
-URL_PROJECT_ATLAS = "https://gitlab.cern.ch/api/v4/projects/53790/registry/repositories"
-URL_PROJECT_STAT = "https://gitlab.cern.ch/api/v4/projects/122672/registry/repositories"
+DOCKERHUB_REPO = "https://hub.docker.com/v2/repositories/atlas"
+# GITLAB_REPO = "https://gitlab.cern.ch/api/v4/projects"
+GITLAB_REPO_ATLAS = "https://gitlab.cern.ch/api/v4/projects/53790/registry/repositories"
+GITLAB_REPO_STAT = "https://gitlab.cern.ch/api/v4/projects/122672/registry/repositories"
 IMAGE_CONFIG = {
-    "analysisbase": {"url_repos": URL_PROJECT_ATLAS,
-                     "pythonVersion": [["21.*", "python27"], ["22.*", "python37"],
-                                       ["23.*", "python39"], ["24.*", "python39"]
-                                       ],
-                     },
-    "athanalysis": {"url_repos": URL_PROJECT_ATLAS,
-                    "pythonVersion": [["21.*", "python27"], ["22.*", "python37"],
-                                      ["23.*", "python39"], ["24.*", "python39"]
-                                      ],
-                    },
-    "analysistop": {"url_repos": URL_PROJECT_ATLAS,
-                    "pythonVersion": [["21.*", "python27"], ["22.*", "python37"],
-                                      ["23.*", "python39"], ["24.*", "python39"]
-                                      ],
-                    },
-    "athsimulation": {"url_repos": URL_PROJECT_ATLAS,
+     "analysisbase": {"url_repos": {"gitlab": GITLAB_REPO_ATLAS, "dockerhub": DOCKERHUB_REPO},
                       "pythonVersion": [["21.*", "python27"], ["22.*", "python37"],
                                         ["23.*", "python39"], ["24.*", "python39"]
                                         ],
                       },
-    "statanalysis": {"url_repos": URL_PROJECT_STAT,
-                     "pythonVersion": [["0-0-*", "python38"], ["*", "python310"]],
+     "athanalysis": {"url_repos": {"gitlab": GITLAB_REPO_ATLAS, "dockerhub": DOCKERHUB_REPO},
+                    "pythonVersion": [["21.*", "python27"], ["22.*", "python37"],
+                                      ["23.*", "python39"], ["24.*", "python39"]
+                                      ],
                      },
+     "analysistop": {"url_repos": {"gitlab": GITLAB_REPO_ATLAS, "dockerhub": DOCKERHUB_REPO},
+                    "pythonVersion": [["21.*", "python27"], ["22.*", "python37"],
+                                      ["23.*", "python39"], ["24.*", "python39"]
+                                      ],
+                     },
+     "athsimulation": {"url_repos": {"gitlab": GITLAB_REPO_ATLAS, "dockerhub": DOCKERHUB_REPO},
+                       "pythonVersion": [["21.*", "python27"], ["22.*", "python37"],
+                                         ["23.*", "python39"], ["24.*", "python39"]
+                                         ],
+                       },
+     "statanalysis": {"url_repos": {"gitlab": GITLAB_REPO_STAT, "dockerhub": None},
+                      "pythonVersion": [["0-0-*", "python38"], ["*", "python310"]],
+                      },
 }
 ATLAS_PROJECTS = list(IMAGE_CONFIG.keys())
-
-DOCKERHUB_REPO = "https://hub.docker.com/v2/repositories/atlas"
 
 
 class Version(str):
@@ -152,6 +152,10 @@ def set_default_subparser(parser, default_subparser, index_action=1):
         if arg in ["-h", "--help",
                    "-V", "--version"]:  # global help or version, no default subparser
             break
+        elif arg == "--gitlab" or arg == "--dockerhub":
+            index_action += 1
+            sys.argv.remove(arg)
+            sys.argv.insert(1, arg)
     else:
         for x in parser._subparsers._actions:
             if not isinstance(x, argparse._SubParsersAction):
@@ -293,21 +297,70 @@ def run_shellCmd(shellCmd, exitOnFailure=True):
     return retCode, out
 
 
-def listImageTags(project):
-    url_tags = (IMAGE_CONFIG[project])["url_repos"] + "?tags=true"
-    json_obj = json.loads(getUrlContent(url_tags))
+def listImageTags(project, imageSrc):
+    if imageSrc is None or imageSrc == "gitlab":
+        imageTags_gitlab, _ = listImageTags_gitlab(project)
+    else:
+        imageTags_gitlab = []
+    if imageSrc is None or imageSrc == "dockerhub":
+        imageTags_dockerhub = list(listImageTags_dockerhub(project).keys())
+    else:
+        imageTags_dockerhub = []
+    return list(set(imageTags_gitlab + imageTags_dockerhub))
+
+
+def listImageTags_gitlab(project):
+    imageTags = []
     repoID = None
+    gitlab_repo = (IMAGE_CONFIG[project])["url_repos"]["gitlab"]
+    if gitlab_repo is None:
+        return imageTags, repoID
+
+    url_tags = gitlab_repo + "?tags=true"
+    json_obj = json.loads(getUrlContent(url_tags))
     json_tags = {}
     for repo in json_obj:
         if repo["name"] == project or repo["path"].endswith("/" + project):
             json_tags = repo["tags"]
             repoID = repo["id"]
             break
-    imageTags = []
     for tagObj in json_tags:
         imageTags += [tagObj["name"]]
 
     return imageTags, repoID
+
+
+def listImageTags_dockerhub(project):
+    dockerhub_repo = (IMAGE_CONFIG[project])["url_repos"]["dockerhub"]
+    if dockerhub_repo is None:
+        return {}
+
+    url_tags = dockerhub_repo + "/" + project + "/tags?page_size=5000"
+    json_obj = json.loads(getUrlContent(url_tags))
+    json_tags = json_obj["results"]
+    imageTags = {}
+    latest_digest = ""
+    latest_name = ""
+    for tagObj in json_tags:
+        name = tagObj["name"]
+        digest = tagObj["images"][0]["digest"]
+        imageSize = tagObj["full_size"]
+        lastUpdate = tagObj["tag_last_pushed"]
+        imageTags[name] = {
+            "imageCompressedSize": imageSize,
+            "lastUpdate": lastUpdate,
+            "releaseName": name,
+            "digest": digest}
+        if name == "latest":
+            latest_digest = digest
+        elif latest_digest != "":
+            if digest == latest_digest:
+                latest_name = name
+
+    if latest_name != "":
+        imageTags["latest"]["releaseName"] = latest_name
+
+    return imageTags
 
 
 def listReleases(args):
@@ -323,7 +376,15 @@ def listReleases(args):
         releases = releaseTags["releases"]
     else:
         releases = None
-    imageTags, _ = listImageTags(project)
+
+    imageSrc = None
+    if args.dockerhub:
+        imageSrc = "dockerhub"
+    elif args.gitlab:
+        imageSrc = "gitlab"
+
+    imageTags = listImageTags(project, imageSrc)
+
     releasePrint = ""
     if releases is None:
         tags = imageTags
@@ -356,7 +417,7 @@ def listReleases(args):
                         break
                 else:
                     if (releaseNoWild != tagName and
-                            releaseNoWild not in re.split(r"[-.]", tagName)):
+                        releaseNoWild not in re.split(r"[-.]", tagName)):
                         matchTag = False
                         break
             if matchTag:
@@ -370,22 +431,60 @@ def listReleases(args):
         pp.pprint(tags)
         if len(tags) == 1:
             print()
-            getImageInfo(project, tags[0])
+            getImageInfo(project, tags[0], imageSrc)
             print("\nTo run the above image, just run")
             print("\tsource %s %s,%s" % (sys.argv[0], project, tags[0]))
     else:
-        print("No release container found for the project=%s, and %s" %
-              (project, releasePrint))
+        if len(releasePrint) == 0:
+            print("No release container found for the project=%s" % project)
+        else:
+            print("No release container found for the project=%s, and %s" %
+                  (project, releasePrint))
 
 
-def getImageInfo(project, release, printOut=True):
-    imageInfo = {}
-    imageTags, repoID = listImageTags(project)
-    if release not in imageTags:
+def getImageInfo(project, release, imageSrc, printOut=True):
+    imageInfo = None
+    if imageSrc is None or imageSrc == "gitlab":
+        imageInfo = getImageInfo_gitlab(project, release, printOut)
+    if imageInfo is None and (imageSrc is None or imageSrc == "dockerhub"):
+        imageInfo = getImageInfo_dockerhub(project, release, printOut)
+    if imageInfo is None:
         print("!!Warning!! release=%s is NOT available" % release)
         sys.exit(1)
+    return imageInfo
 
-    url_tag = (IMAGE_CONFIG[project])["url_repos"] + \
+
+def getImageInfo_dockerhub(project, release, printOut=True):
+    imageInfo = {}
+    imageTags = listImageTags_dockerhub(project)
+    if release in imageTags:
+        imageInfo = imageTags[release].copy()
+        releaseName = imageInfo.pop("releaseName")
+        imageInfo["dockerPath"] = "docker.io/atlas/%s:%s" % (
+            project, releaseName)
+    else:
+        return None
+    #     print("!!Warning!! release=%s is NOT available" % release)
+    #     sys.exit(1)
+
+    if len(imageInfo) > 0 and printOut:
+        print("The matched image info:")
+        print("\tdockerPath=", imageInfo["dockerPath"],
+              "\n\timage compressed size=", imageInfo["imageCompressedSize"],
+              "\n\tlast update time=", imageInfo["lastUpdate"],
+              "\n\tdigest=", imageInfo["digest"])
+    return imageInfo
+
+
+def getImageInfo_gitlab(project, release, printOut=True):
+    imageInfo = {}
+    imageTags, repoID = listImageTags_gitlab(project)
+    if release not in imageTags:
+        return None
+        # print("!!Warning!! release=%s is NOT available" % release)
+        # sys.exit(1)
+
+    url_tag = (IMAGE_CONFIG[project])["url_repos"]["gitlab"] + \
         "/%s/tags/%s" % (repoID, release)
     json_obj = json.loads(getUrlContent(url_tag))
 
@@ -411,7 +510,12 @@ def printImageInfo(args):
         print("Only one release tag is allowed, but multiple are given \n\t",
               releases)
         sys.exit(1)
-    getImageInfo(project, releases[0])
+    imageSrc = None
+    if args.dockerhub:
+        imageSrc = "dockerhub"
+    elif args.gitlab:
+        imageSrc = "gitlab"
+    getImageInfo(project, releases[0], imageSrc)
 
 
 # build Singularity sandbox
@@ -453,7 +557,8 @@ releaseSetup2="/home/atlas/release_setup.sh"
 if [ -e $sandboxPath$releaseSetup1 -o $sandboxPath$releaseSetup2 ]; then
    if [[ $# -eq 1 && "$1" =~ ^[Jj]upyter$ ]]; then
       runCmd="echo Jupyter is not ready yet"
-      # runCmd="$contCmd exec $bindOpt $sandboxPath /bin/bash -c "'"source $releaseSetup; jupyter lab"'
+      # runCmd=("$contCmd exec $bindOpt $sandboxPath /bin/bash -c "
+      #         '"source $releaseSetup; jupyter lab"')
    else
       if [ -e $sandboxPath$releaseSetup1 ]; then
          releaseSetup=$releaseSetup1
@@ -660,7 +765,6 @@ def printMe(args):
         print("No previous container/sandbox setup is found")
         return None
     myImageInfo = getMyImageInfo(args.shellFilename)
-    # contCmd = myImageInfo["contCmd"]
     if "runOpt" in myImageInfo:
         myImageInfo.pop("runOpt")
     pp = pprint.PrettyPrinter(indent=4)
@@ -705,7 +809,12 @@ def prepare_setup(args):
         if isLastRelease(args.shellFilename, project, release, args.contCmd):
             sys.exit(0)
 
-    imageInfo = getImageInfo(project, release)
+    imageSrc = None
+    if args.dockerhub:
+        imageSrc = "dockerhub"
+    elif args.gitlab:
+        imageSrc = "gitlab"
+    imageInfo = getImageInfo(project, release, imageSrc)
     # dockerPath = imageInfo["dockerPath"]
 
     for cmd in CONTAINER_CMDS:
@@ -724,7 +833,8 @@ def prepare_setup(args):
         if args.contCmd in ContCmds_available:
             contCmd = args.contCmd
         else:
-            print("The specified command=%s to run containers is NOT found" % args.contCmd)
+            print("The specified command=%s to run containers is NOT found" %
+                  args.contCmd)
             print("Please choose the available command(s) on the machine to run containers")
             print("\t", ContCmds_available)
             sys.exit(1)
@@ -803,17 +913,17 @@ def main():
 
     example_global = """Examples:
 
-  ./%s list AthAnalysis
   ./%s list athanalysis,"21.2.2*"
   ./%s list AnalysisBase,24.2,alma9
-  ./%s AnalysisBase:latest
+  ./%s --dockerhub list athsimulation
+  ./%s --gitlab list statanalysis
   ./%s    # Empty arg to rerun the already setup container
   ./%s setup AnalysisBase,21.2.132""" % ((myScript,) * 6)
 
     example_setup = """Examples:
 
   ./%s AnalysisBase,21.2.132
-  /.%s --sing AnalysisBase,21.2.132""" % (myScript, myScript)
+  ./%s --sing AnalysisBase,21.2.132""" % (myScript, myScript)
 
     parser = argparse.ArgumentParser(
             epilog=example_global,
@@ -831,6 +941,15 @@ def main():
             "-V", "--version",
             action="store_true",
             help="print out the script version")
+    group_imageSrc = parser.add_mutually_exclusive_group()
+    group_imageSrc.add_argument(
+            "--gitlab",
+            action="store_true",
+            help="use container images from the CERN gitlab image registry")
+    group_imageSrc.add_argument(
+            "--dockerhub",
+            action="store_true",
+            help="use container images from the Docker Hub")
     sp = parser.add_subparsers(dest="command", help="Default=setup")
 
     sp_listReleases = sp.add_parser(
@@ -891,7 +1010,11 @@ def main():
             description="(not ready yet)run JupyterLab on the already created container/sandbox")
     sp_jupyter.set_defaults(func=jupyter)
 
-    args, _ = parser.parse_known_args()
+    args, unknown = parser.parse_known_args()
+
+    if unknown:
+        print("Warning: Unknown options:", ", ".join(unknown))
+        sys.exit(1)
 
     if args.version:
         version = getVersion()
