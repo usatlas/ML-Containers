@@ -11,8 +11,8 @@ RUN yum -y install which file git bzip2 \
 
 # path prefix for micromamba to install pkgs into
 #
-ARG TF_ver=2.15.0
-ARG Conda_ver=12.4
+ARG TF_ver=2.14.*
+ARG Conda_ver=12.3.*
 ARG prefix=/opt/conda
 ARG Micromamba_ver=1.5.7
 ARG PyVer=3.9
@@ -84,7 +84,7 @@ RUN micromamba install -y lightgbm xgboost catboost \
 # TensorFlow Datasets: a collection of ready-to-use datasets
 #
 RUN export CONDA_OVERRIDE_CUDA=$Conda_ver \
-    && micromamba install -y tensorflow-gpu=$TF_ver cuda-compat tensorflow-datasets \
+    && micromamba install -y tensorflow-gpu=$TF_ver cuda-compat=$Conda_ver tensorflow-datasets \
     && cd $prefix/lib && ln -s ../cuda-compat/lib*.so* . \
     && micromamba clean -y -a -f
 
@@ -93,7 +93,7 @@ RUN micromamba install -y keras-tuner keras-cv \
     && micromamba clean -y -a -f
 
 # Install keras-nlp
-RUN $prefix/bin/python -m pip install keras-nlp tf_keras==2.15.0 tensorflow-text==2.15.0 \
+RUN $prefix/bin/python -m pip install keras-nlp tf_keras==$TF_ver tensorflow-text==$TF_ver \
     && $prefix/bin/python -m pip cache purge
 
 # get the command lspci to enable gpu checking in shell
