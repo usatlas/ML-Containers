@@ -11,7 +11,7 @@ RUN yum -y install which file git bzip2 \
 
 # path prefix for micromamba to install pkgs into
 #
-ARG TF_ver=2.14.*
+ARG TF_ver=2.15.*
 ARG Conda_ver=12.3.*
 ARG prefix=/opt/conda
 ARG Micromamba_ver=1.5.7
@@ -85,6 +85,7 @@ RUN micromamba install -y lightgbm xgboost catboost \
 #
 RUN export CONDA_OVERRIDE_CUDA=$Conda_ver \
     && micromamba install -y tensorflow-gpu=$TF_ver cuda-compat=$Conda_ver tensorflow-datasets \
+#    && micromamba install -y tensorflow-gpu=$TF_ver cuda-compat=$Conda_ver cuda-version=$Conda_ver tensorflow-datasets \
     && cd $prefix/lib && ln -s ../cuda-compat/lib*.so* . \
     && micromamba clean -y -a -f
 
