@@ -11,8 +11,8 @@ RUN yum -y install which file git bzip2 \
 
 # path prefix for micromamba to install pkgs into
 #
-ARG TF_ver=2.15.*
-ARG Conda_ver=12.3.*
+ARG TF_ver=2.14.*
+ARG Conda_ver=11.8
 ARG prefix=/opt/conda
 ARG Micromamba_ver=1.5.7
 ARG PyVer=3.9
@@ -80,13 +80,13 @@ RUN micromamba install -y lightgbm xgboost catboost \
 # And cuda-compat (Forward Compatibility Package)
 #     https://docs.nvidia.com/deploy/cuda-compatibility/index.html#installing-title
 #
+# But it would fail for cuda-compat=12.3 on lxplus-gpu with kernel 550 (cuda=12.5)
+#
 # And install tensorflow-datasets
 # TensorFlow Datasets: a collection of ready-to-use datasets
 #
 RUN export CONDA_OVERRIDE_CUDA=$Conda_ver \
-    && micromamba install -y tensorflow-gpu=$TF_ver cuda-compat=$Conda_ver tensorflow-datasets \
-#    && micromamba install -y tensorflow-gpu=$TF_ver cuda-compat=$Conda_ver cuda-version=$Conda_ver tensorflow-datasets \
-    && cd $prefix/lib && ln -s ../cuda-compat/lib*.so* . \
+    && micromamba install -y tensorflow-gpu=$TF_ver tensorflow-datasets \
     && micromamba clean -y -a -f
 
 # Install a few keras-related packages
