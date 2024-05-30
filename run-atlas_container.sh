@@ -70,7 +70,7 @@ import difflib
 
 from shutil import which, rmtree
 from subprocess import getstatusoutput
-from urllib.request import urlopen
+from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 import ssl
 
@@ -176,6 +176,16 @@ def getUrlContent(url):
         ssl_context = ssl._create_unverified_context()
         response = urlopen(url, context=ssl_context)
     return response.read().decode("utf-8")
+
+
+def getUrlHeaders(url):
+    try:
+        response = urlopen(url)
+    except (URLError, HTTPError) as e:
+        print("Error fetching URL:", e)
+        ssl_context = ssl._create_unverified_context()
+        response = urlopen(url, context=ssl_context)
+    return response.headers
 
 
 def getLastCommit():
@@ -907,6 +917,44 @@ def jupyter(args):
         return None
 
 
+# Get a DockerHub token for a given scrope and username
+def get_docker_hub_token(repo, username=None):
+    """
+    Get a Docker Hub token. If username is given, authenticate with that username.
+    """
+    url_token = "https://auth.docker.io/token?service=registry.docker.io&scope=repository:" + repo + ":pull"
+    json_obj = json.loads(getUrlContent(url_token))
+    token = json_obj["token"]
+    return token
+
+
+def getPullLimit(args):
+    """
+    Get the pull limit information for anonymous user or a given username
+    """
+    username = args.username
+    repo = "ratelimitpreview/test"
+    token = get_docker_hub_token(repo, username)
+    url_digest = "https://registry-1.docker.io/v2/" + repo + "/manifests/latest"
+    req = Request(url_digest, method="HEAD")
+    req.add_header('Authorization', 'Bearer %s' % token)
+    headers = getUrlHeaders(req)
+
+    limit_info = {
+        "ratelimit-limit": headers.get("ratelimit-limit"),
+        "ratelimit-remaining": headers.get("ratelimit-remaining"),
+        "docker-ratelimit-source": headers.get("docker-ratelimit-source"),
+    }
+    remaining = limit_info["ratelimit-remaining"]
+    period_seconds = int(remaining.split('=')[-1])
+    period_hours = period_seconds / 3600
+    limit_remaining = int(remaining.split(';')[0])
+    print("The pull limit info on the Docker Hub is:")
+    print(
+        "    The remaining pull limit=%i per %i hours" %
+        (limit_remaining, period_hours))
+
+
 def main():
 
     myScript = os.path.basename(os.path.abspath(sys.argv[0]))
@@ -968,6 +1016,17 @@ def main():
             description="print the image size and last update date of the given image")
     sp_printImageInfo.add_argument("tags", nargs="+", metavar="<ReleaseTags>")
     sp_printImageInfo.set_defaults(func=printImageInfo)
+
+    sp_printPullLimit = sp.add_parser(
+        'printPullLimit',
+        help='print the pull limit info on the Docker Hub',
+        description='print out the pull limit info on the Docker Hub, for anonymous or a given user')
+    sp_printPullLimit.add_argument(
+        'username',
+        nargs='?',
+        metavar='<UserName>',
+        help="A DockerHub name, otherwise anonymous user will be applied")
+    sp_printPullLimit.set_defaults(func=getPullLimit)
 
     sp_printMe = sp.add_parser(
             "printMe",
