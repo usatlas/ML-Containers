@@ -1,6 +1,6 @@
 #!/bin/bash
 # coding: utf-8
-# version=2024-04-16-r01
+# version=2024-05-31-r01
 # author: Shuwei Ye <yesw@bnl.gov>
 "true" '''\'
 myScript="${BASH_SOURCE:-$0}"
@@ -514,10 +514,11 @@ def create_container(contCmd, contName, dockerPath, bindOpt, force=False):
 
     secOpt = ""
     if contCmd == "podman":
-        lsCmd = "%s run -it --rm %s ls / | tail -1" % (contCmd, dockerPath)
-        out = run_shellCmd(lsCmd, exitOnFailure=False)
-        if out.find("Operation not permitted") >= 0:
-            secOpt = "--security-opt seccomp=unconfined"
+        # lsCmd = "%s run -it --rm %s ls / | tail -1" % (contCmd, dockerPath)
+        # out = run_shellCmd(lsCmd, exitOnFailure=False)
+        # if out.find("Operation not permitted") >= 0:
+        # secOpt = "--security-opt seccomp=unconfined"
+        secOpt = "--privileged"
 
     pwd = os.getcwd()
     createOpt = "-it -v %s:%s -w %s %s %s %s" % (
@@ -593,7 +594,7 @@ if [[ $# -eq 1 && "$1" =~ ^[Jj]upyter$ ]]; then
    gid=$(id -g)
    runCmd="$contCmd exec -it -u ${uid}:${gid} -e USER=$USER $contName jupyter lab --ip 0.0.0.0"
 else
-   runCmd="$contCmd exec -it $contName /bin/bash"
+   runCmd="$contCmd exec -it $contName /bin/bash -l"
 fi
 
 echo -e "\\n$runCmd\\n"
@@ -772,6 +773,8 @@ def setup(args):
                     bindOpt = '--device=' + ','.join(devices)
                 else:
                     bindOpt = '--gpus all'
+                if os.path.exists("/usr/lib64/libcuda.so") and os.path.exists("/usr/lib64/libcuda.so.1"):
+                    bindOpt += " -v /usr/lib64/libcuda.so:/usr/local/nvidia/lib64/libcuda.so -v /usr/lib64/libcuda.so.1:/usr/local/nvidia/lib64/libcuda.so.1"
 
         for path in volumes:
             if path.find(':') > 0:
