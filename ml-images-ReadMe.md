@@ -339,13 +339,12 @@ consequently concealing packages with identical names in the new environment.
 Thankfully, the [pyvenv.cfg](https://python.readthedocs.io/en/latest/library/site.html?highlight=pyvenv%20cfg) file, 
 specifically designed for Python virtual environments, offers a solution to the above challenge:
 
-```shell
-Singularity> cat pyvenv.cfg
-	home = /cvmfs/unpacked.cern.ch/.flat/8e/8e1e32f4a80a16356dde5c933638471b7d43f042ee163b8cdba36c8b504227f6/opt/conda/bin
-	**include-system-site-packages** = true
-	version = 3.9.19
-Singularity>
-```
+> Singularity> cat pyvenv.cfg <br>
+>  home = /cvmfs/unpacked.cern.ch/.flat/8e/8e1e32f4a80a16356dde5c933638471b7d43f042ee163b8cdba36c8b504227f6/opt/conda/bin <br>
+>  **include-system-site-packages** = true <br>
+>  version = 3.9.19 <br>
+> Singularity>
+
 
 In the file, the parameter *include-system-site-packages* is set to true, and the `python3` 
 in the new environment directory is **sym-linked** to the `python3` from the image path.
