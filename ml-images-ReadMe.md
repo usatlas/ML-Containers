@@ -210,12 +210,12 @@ These extended user environments can subsequently be conveniently reused.
 
 Upon the container startup of the ML images, the following message would be printed out:
 
-> % singularity run /cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/ml-base:alma9-python39
->
-> For the content in this container,
->   please read the file /list-of-pkgs-inside.txt
->
-> To create your own new env, run "**source /create-newEnv-on-base.sh** -h" for help
+> % singularity run /cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/ml-base:alma9-python39 <br>
+> <br>
+> For the content in this container, <br>
+>   please read the file /list-of-pkgs-inside.txt <br>
+> <br>
+> To create your own new env, run "**source /create-newEnv-on-base.sh** -h" for help <br>
 > Singularity>
 
 As the message suggests, just run `source /create-newEnv-on-base.sh` to create a new extended env.
@@ -257,9 +257,9 @@ Singularity>
 
 Since the images are built through `micromamba`, the images can also be used as virtual envs by sourcing the script *setupMe-on-host.sh*:
 
-> % source /cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/ml-base:alma9-python39/setupMe-on-host.sh
->
-> To create your own new env, run "**source $EnvTopDir/create-newEnv-on-base.sh** -h" for help
+> % source /cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/ml-base:alma9-python39/setupMe-on-host.sh <br>
+> <br>
+> To create your own new env, run "**source $EnvTopDir/create-newEnv-on-base.sh** -h" for help <br>
 > (base) %
 
 Then we source the same script *create-newEnv-on-base.sh*** as in container running, to create an extended env:
@@ -491,25 +491,25 @@ The script supports 5 types of container commands: **podman**, **docker**, **ner
 The script will pick up one automatically based on the availability. You can specify an option to choose one.
 Run "**source run-ml_container.sh setup -h**" for more details.
 
-> usage: run-ml_container.sh setup [-h] [--podman | --docker | --nerdctl | --apptainer | --singularity]
->                                  [-f]  \<ImageName\>
-> 
-> positional arguments:
->   \<ImageName\>    image name to run
-> 
-> optional arguments:
->   -h, --help     show this help message and exit
->   --podman       Use podman to the container
->   --docker       Use docker to the container
->   --nerdctl      Use nerdctl to the container
->   --apptainer    Use apptainer to the container
->   --singularity  Use singularity to the container
->   -f, --force    Force to override the existing container/sandbox
-> 
-> Examples:
-> 
->   source run-ml_container.sh ml-base:alma9-python39
->   source run-ml_container.sh --sing ml-base:alma9-python39
+> usage: run-ml_container.sh setup [-h] [--podman | --docker | --nerdctl | --apptainer | --singularity] <br>
+>                [-f] [-B [path[,srcPath:targePath]]]  \<ImageName\> <br>
+>  <br>
+> positional arguments: <br>
+>   \<ImageName\>    image name to run <br>
+>  <br>
+> optional arguments: <br>
+>   -h, --help     show this help message and exit <br>
+>   --podman       Use podman to the container <br>
+>   --docker       Use docker to the container <br>
+>   --nerdctl      Use nerdctl to the container <br>
+>   --apptainer    Use apptainer to the container <br>
+>   --singularity  Use singularity to the container <br>
+>   -f, --force    Force to override the existing container/sandbox <br>
+>  <br>
+> Examples: <br>
+>  <br>
+>   source run-ml_container.sh ml-base:alma9-python39 <br>
+>   source run-ml_container.sh --sing ml-base:alma9-python39
 
 #### Container Setup Through `podman`
 
