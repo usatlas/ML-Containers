@@ -1,4 +1,5 @@
 FROM centos:centos7 as centos7
+FROM registry.cern.ch/docker.io/cern/alma9-base:20241202-1 AS cern_alma9
 # FROM mambaorg/micromamba:latest as micromamba
 
 FROM almalinux:9
@@ -14,8 +15,9 @@ RUN yum -y install which file git bzip2 \
 ARG TF_ver=2.14.*
 ARG Conda_ver=11.8
 ARG prefix=/opt/conda
-ARG Micromamba_ver=1.5.7
+ARG Micromamba_ver=2.0.4
 ARG PyVer=3.9
+ARG SSLVer=3.2.2
 ARG Mamba_exefile=bin/micromamba
 ENV MAMBA_EXE=/$Mamba_exefile MAMBA_ROOT_PREFIX=$prefix CONDA_PREFIX=$prefix
 
@@ -38,7 +40,7 @@ RUN curl -L https://micromamba.snakepit.net/api/micromamba/linux-64/$Micromamba_
 #   be installed as dependencies)
 #
 COPY python3-nohome $prefix/bin/
-RUN micromamba install -y python=$PyVer pipenv \
+RUN micromamba install -y python=$PyVer openssl=$SSLVer pipenv \
     uproot pandas scikit-learn seaborn plotly_express scikit-hep=5.1.1 \
     && cd $prefix/bin && chmod +x python3-nohome \
     && sed -i "1,3 s%${PWD}/python%/usr/bin/env python%" \
@@ -51,7 +53,7 @@ RUN micromamba install -y python=$PyVer pipenv \
 # click, pyrsistent and rich, needed by jupyter-events
 #
 COPY shellWrapper-for-python3-I.sh shellWrapper-for-python3-nohome.sh /tmp/
-RUN micromamba install -y jupyterlab jupyterhub click pyrsistent rich \
+RUN micromamba install -y openssl=$SSLVer jupyterlab jupyterhub click pyrsistent rich \
     && cd $prefix/bin \
     && sed -i -e '1r/tmp/shellWrapper-for-python3-I.sh' -e '0,/coding:/d' jupyter* \
     && sed -i -e '1r/tmp/shellWrapper-for-python3-nohome.sh' -e '0,/coding:/d' ipython \
@@ -86,7 +88,7 @@ RUN micromamba install -y lightgbm xgboost catboost \
 # TensorFlow Datasets: a collection of ready-to-use datasets
 #
 RUN export CONDA_OVERRIDE_CUDA=$Conda_ver \
-    && micromamba install -y tensorflow-gpu=$TF_ver tensorflow-datasets \
+    && micromamba install -y openssl=$SSLVer tensorflow-gpu=$TF_ver tensorflow-datasets \
     && micromamba clean -y -a -f
 
 # Install a few keras-related packages
@@ -111,6 +113,11 @@ RUN micromamba install -y zsh tcsh \
 # copy libssl.so.10 to make jupter-labhub from centos7-based host work
 COPY --from=centos7  /lib64/libfreebl3.so /lib64/libcrypt.so.1 /lib64/libcrypto.so.10 \
      /lib64/libssl.so.10 /lib64/libtinfo.so.5 /lib64/libncursesw.so.5 /lib64/libffi.so.6 /lib64
+
+# copy libssl.so.3 and libcrypto.so.3 from cern/alma9-base
+# to provide the libcrypto.so enabling the DM2 algorithm
+COPY --from=cern_alma9 /lib64/libcrypto.so.$SSLVer /opt/conda/lib/libcrypto.so.3
+COPY --from=cern_alma9 /lib64/libssl.so.$SSLVer /opt/conda/lib/libssl.so.3
 
 # print out the package list into file /list-of-pkgs-inside.txt
 #

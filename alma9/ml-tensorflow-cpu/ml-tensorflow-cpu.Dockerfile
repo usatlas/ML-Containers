@@ -1,4 +1,5 @@
-FROM centos:centos7 as centos7
+FROM centos:centos7 AS centos7
+FROM registry.cern.ch/docker.io/cern/alma9-base:20241202-1 AS cern_alma9
 # FROM mambaorg/micromamba:latest as micromamba
 
 FROM almalinux:9
@@ -9,20 +10,27 @@ RUN yum -y install which file git bzip2 \
     && yum -y clean all \
     && cd /tmp && rm -f tmp* yum.log
 
+# Automatic defined variable(s)
+ARG TARGETARCH
+
 # path prefix for micromamba to install pkgs into
 #
 ARG TF_ver=2.15.0
 # ARG Conda_ver=12.4
 ARG prefix=/opt/conda
-ARG Micromamba_ver=1.5.7
+ARG Micromamba_ver=2.0.4
 ARG PyVer=3.9
+ARG SSLVer=3.2.2
 ARG Mamba_exefile=bin/micromamba
 ENV MAMBA_EXE=/$Mamba_exefile MAMBA_ROOT_PREFIX=$prefix CONDA_PREFIX=$prefix
 
 # Install micromamba
 #
 COPY _activate_current_env.sh /usr/local/bin/
-RUN curl -L https://micromamba.snakepit.net/api/micromamba/linux-64/$Micromamba_ver | \
+RUN mamba_arch="linux-64" && if [ "$TARGETARCH" = "arm64" ]; then \
+       mamba_arch="linux-aarch64"; \
+    fi \
+    && curl -L https://micromamba.snakepit.net/api/micromamba/$mamba_arch/$Micromamba_ver | \
     tar -xj -C / $Mamba_exefile \
     && mkdir -p $prefix/bin && chmod a+rx $prefix \
     && ln $MAMBA_EXE $prefix/bin/ \
@@ -38,7 +46,7 @@ RUN curl -L https://micromamba.snakepit.net/api/micromamba/linux-64/$Micromamba_
 #   be installed as dependencies)
 #
 COPY python3-nohome $prefix/bin/
-RUN micromamba install -y python=$PyVer pipenv \
+RUN micromamba install -y python=$PyVer openssl=$SSLVer pipenv \
     uproot pandas scikit-learn seaborn plotly_express scikit-hep=5.1.1 \
     && cd $prefix/bin && chmod +x python3-nohome \
     && sed -i "1,3 s%${PWD}/python%/usr/bin/env python%" \
@@ -51,7 +59,7 @@ RUN micromamba install -y python=$PyVer pipenv \
 # click, pyrsistent and rich, needed by jupyter-events
 #
 COPY shellWrapper-for-python3-I.sh shellWrapper-for-python3-nohome.sh /tmp/
-RUN micromamba install -y jupyterlab jupyterhub click pyrsistent rich \
+RUN micromamba install -y openssl=$SSLVer jupyterlab jupyterhub click pyrsistent rich \
     && cd $prefix/bin \
     && sed -i -e '1r/tmp/shellWrapper-for-python3-I.sh' -e '0,/coding:/d' jupyter* \
     && sed -i -e '1r/tmp/shellWrapper-for-python3-nohome.sh' -e '0,/coding:/d' ipython \
@@ -78,7 +86,7 @@ RUN micromamba install -y lightgbm xgboost catboost \
 # And install tensorflow-datasets
 # TensorFlow Datasets: a collection of ready-to-use datasets
 #
-RUN micromamba install -y tensorflow=$TF_ver tensorflow-datasets \
+RUN micromamba install -y openssl=$SSLVer tensorflow=$TF_ver tensorflow-datasets \
     && micromamba clean -y -a -f
 
 # Install a few keras-related packages

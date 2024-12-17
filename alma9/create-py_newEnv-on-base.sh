@@ -66,7 +66,8 @@ if [ "$isPWD" == "no" ]; then
 fi
 
 pipenv --site-packages install
-sed -i  '/^VIRTUAL_ENV=/s#=.*#=$(realpath ${BASH_SOURCE%/*/*})#' .venv/bin/activate
+# sed -i  '/^VIRTUAL_ENV=/s#=.*#=$(realpath ${BASH_SOURCE%/*/*})#' .venv/bin/activate
+sed -i  '/^VIRTUAL_ENV=/s#=.*#=$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" \&>/dev/null \&\& pwd)#' .venv/bin/activate
 
 ln -s $CONDA_PREFIX/lib/*.so* .venv/lib/
 
