@@ -1,4 +1,4 @@
-if [ "X$CONTAINER_USERENV" = "X" ] && [ "X$PRINTME_SOURCED" = "X" ]; then
+if [ -z "$CONTAINER_USERENV" ] && [ -z "$PRINTME_SOURCED" ]; then
    echo -e "\nFor the content in this container,\n  please read the file /list-of-pkgs-inside.txt"
    if [ -w $CONDA_PREFIX/conda-meta/history ]; then
       echo -e '\nTo install new pkg(s), run "micromamba install pkg1 [pkg2 ...]"'

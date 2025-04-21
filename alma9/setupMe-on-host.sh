@@ -1,5 +1,26 @@
 #!/bin/bash
 
+# Add usage function
+usage() {
+    cat << EOF
+Usage: source ${BASH_SOURCE:-$0}
+
+This script sets up a Singularity container sandbox as a virtual environment on the host machine.
+It configures micromamba and conda environment settings without running an actual container.
+
+Options:
+    -h, --help    Show this help message and exit
+
+Note: This script must be sourced, not executed directly.
+EOF
+}
+
+# Add help argument handling
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    usage
+    return 0
+fi
+
 myName="${BASH_SOURCE:-$0}"
 myDir=$(dirname $myName)
 myDir=$(readlink -f -- $myDir)

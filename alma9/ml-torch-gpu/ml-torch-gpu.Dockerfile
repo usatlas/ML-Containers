@@ -1,5 +1,4 @@
 FROM centos:centos7 as centos7
-# FROM registry.cern.ch/docker.io/cern/alma9-base:20241202-1 AS cern_alma9
 FROM docker.io/cern/alma9-base:20241202-1 AS cern_alma9
 # FROM mambaorg/micromamba:latest as micromamba
 
@@ -13,7 +12,6 @@ RUN yum -y install which file git bzip2 \
 
 # path prefix for micromamba to install pkgs into
 #
-ARG TF_ver=2.14.*
 ARG CUDA_ver=12.4
 ARG prefix=/opt/conda
 ARG Micromamba_ver=2.1.0
@@ -30,6 +28,7 @@ RUN curl -L https://micromamba.snakepit.net/api/micromamba/linux-64/$Micromamba_
     && mkdir -p $prefix/bin && chmod a+rx $prefix \
     && ln $MAMBA_EXE $prefix/bin/ \
     && micromamba config append --system channels conda-forge \
+    && micromamba config append --system channels defaults \
     && echo "source /usr/local/bin/_activate_current_env.sh" >> ~/.bashrc
 
 # install python3, pipenv
@@ -79,7 +78,7 @@ RUN micromamba config set channel_priority strict \
        $(file * | grep "script" | cut -d: -f1) \
     && micromamba clean -y -a -f
 
-# install tensorflow and cuda dependency cudatoolkit
+# install pytorch and cuda dependency cudatoolkit
 # (The installation without CONDA_OVERRIDE_CUDA would fail with error msg
 #      nothing provides __cuda needed by ...)
 #
@@ -88,20 +87,11 @@ RUN micromamba config set channel_priority strict \
 #
 # But it would fail for cuda-compat=12.3 on lxplus-gpu with kernel 550 (cuda=12.5)
 #
-# And install tensorflow-datasets
-# TensorFlow Datasets: a collection of ready-to-use datasets
 #
 RUN export CONDA_OVERRIDE_CUDA=$CUDA_ver \
-    && micromamba install -y openssl=$SSLVer tensorflow-gpu=$TF_ver tensorflow-datasets \
+    && micromamba install -y -c pytorch -c nvidia openssl=$SSLVer pytorch \
+       torchvision torchaudio torchtext captum skorch pytorch-cuda=$CUDA_ver \
     && micromamba clean -y -a -f
-
-# Install a few keras-related packages
-RUN micromamba install -y keras-tuner keras-cv \
-    && micromamba clean -y -a -f
-
-# Install keras-nlp
-RUN $prefix/bin/python -m pip install keras-nlp tf_keras==$TF_ver tensorflow-text==$TF_ver \
-    && $prefix/bin/python -m pip cache purge
 
 # get the command lspci to enable gpu checking in shell
 #
@@ -120,6 +110,8 @@ COPY --from=centos7  /lib64/libfreebl3.so /lib64/libcrypt.so.1 /lib64/libcrypto.
 
 # copy libssl.so.3 and libcrypto.so.3 from cern/alma9-base
 # to provide the libcrypto.so enabling the DM2 algorithm
+# so that it could be compatible with rucio
+#
 COPY --from=cern_alma9 /lib64/libcrypto.so.$SSLVer /opt/conda/lib/libcrypto.so.3
 COPY --from=cern_alma9 /lib64/libssl.so.$SSLVer /opt/conda/lib/libssl.so.3
 
@@ -146,7 +138,7 @@ ENV PATH=${prefix}/bin:${PATH} \
 #
 RUN echo "Make sure tensorflow is installed:" \
     && python --version \
-    && python -c "import tensorflow as tf; print(tf.__version__)"
+    && python -c "import torch; print(torch.cuda)"
 
 # creat/gtar a temporary new env
 COPY gtar-newEnv-on-base.sh /tmp/
@@ -156,11 +148,11 @@ RUN  chmod +x /tmp/gtar-newEnv-on-base.sh \
 
 # copy setup script and readme file
 #
-COPY setupMe-on-host.sh check-gpu-in-tensorflow.py create-newEnv-on-base.sh setup-UserEnv-in-container.sh create-py_newEnv-on-base.sh /
+COPY setupMe-on-host.sh check-gpu-in-torch.py create-newEnv-on-base.sh setup-UserEnv-in-container.sh create-py_newEnv-on-base.sh /
 #
 # The the package cuda-compat, has already included libcuda.so, so printme-gpu.sh is not longer correct.
 # COPY printme-gpu.sh /printme.sh
-COPY printme.sh /printme.sh
+COPY printme-gpu.sh /printme.sh
 RUN cp printme.sh /etc/profile.d/
 # RUN echo "source /printme.sh" >> ~/.bashrc
 

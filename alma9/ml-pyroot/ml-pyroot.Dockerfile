@@ -1,5 +1,6 @@
 FROM centos:centos7 as centos7
-FROM registry.cern.ch/docker.io/cern/alma9-base:20241202-1 AS cern_alma9
+# FROM registry.cern.ch/docker.io/cern/alma9-base:20241202-1 AS cern_alma9
+FROM docker.io/cern/alma9-base:20241202-1 AS cern_alma9
 # FROM mambaorg/micromamba:latest as micromamba
 
 FROM almalinux:9
@@ -13,8 +14,8 @@ RUN yum -y install which file git bzip2 \
 # path prefix for micromamba to install pkgs into
 #
 ARG prefix=/opt/conda
-ARG Micromamba_ver=2.0.4
-ARG PyVer=3.9
+ARG Micromamba_ver=2.1.0
+ARG PyVer=3.11
 ARG SSLVer=3.2.2
 ARG Mamba_exefile=bin/micromamba
 ENV MAMBA_EXE=/$Mamba_exefile MAMBA_ROOT_PREFIX=$prefix CONDA_PREFIX=$prefix
@@ -68,7 +69,10 @@ RUN micromamba install -y openssl=$SSLVer jupyterlab jupyterhub click pyrsistent
     && micromamba clean -y -a -f
 
 # install Gradient Boosting pkgs: lightgbm xgboost catboost
-RUN micromamba install -y lightgbm xgboost catboost \
+#  Restrict catboost=1.2.6 because catboost=1.2.7 will install cudatoolkit too.
+#
+RUN micromamba config set channel_priority strict \
+    && micromamba install -y lightgbm xgboost catboost=1.2.6 \
     && cd $prefix/bin && sed -i "1,3 s%${PWD}/python%/usr/bin/env python%" \
        $(file * | grep "script" | cut -d: -f1) \
     && micromamba clean -y -a -f
