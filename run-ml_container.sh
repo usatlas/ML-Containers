@@ -398,6 +398,8 @@ def listNewPkgs(contCmd, contNamePath, lastLineN):
     channels = []
     for line in output.split('\n'):
         lineN, lineH, lineObj = line.split(':', 2)
+        if not lineN.isdigit():
+           continue
         if int(lineN) <= int(lastLineN):
             continue
         if lineH.find("specs") > 0:
