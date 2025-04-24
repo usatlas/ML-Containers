@@ -9,16 +9,24 @@ Our objective is to construct machine learning (ML) images with the following at
 - Tailored to our distinct requirements for customization
 - Readily accessible through CVMFS deployment
 - Compatible with all three AF Jupyter servers
-- Facilitate seamless extensibility by users.
-- Friendly and convenient user interface.
+- Facilitate seamless extensibility by users
+- Friendly and convenient user interface
 
 ## Image Types
 
-Currently there are 4 types of ML (Machine Learning) images built:
-- **ml-base**: the **base image** of the other 3 images
+Currently there are 5 types of ML (Machine Learning) images built:
+- **ml-base**: the **base image** of the other images
 - **ml-pyroot**: add **PyROOT** on top of *ml-base*
 - **ml-tensorflow-cpu**: add **Tensorflow-cpu** and some **keras** related packages on top of *ml-base*
 - **ml-tensorflow-gpu**: add **Tensorflow-gpu** and some keras related packages on top of *ml-base*
+- **ml-torch-gpu**: add **PyTorch** with GPU support on top of *ml-base*
+
+## Operating Systems and Python Versions
+
+The ML images are available in different OS and Python version combinations:
+- CentOS 7 with Python 3.9
+- Alma Linux 9 with Python 3.9
+- Alma Linux 9 with Python 3.11 (latest)
 
 ## Package Manager `micromamba`
 
@@ -99,6 +107,21 @@ with the following additional packages:
 - keras-nlp: [KerasNLP](https://keras.io/keras_nlp/) is a natural language processing library that works natively with TensorFlow, JAX, or PyTorch.
 - tensorflow-datasets: [TensorFlow Datasets](https://www.tensorflow.org/datasets) is a collection of datasets ready to use, with TensorFlow or other Python ML frameworks, such as Jax.
 
+### Image ml-torch-gpu
+
+On top base of the base image *ml-base*, the packages **pytorch** and **pytorch-cuda** are added accordingly, 
+with the following additional packages:
+- torchtext: [torchtext](https://pytorch.org/text/stable/index.html)
+       consists of data processing utilities and popular datasets for natural language.
+- torchaudio: [torchaudio](https://pytorch.org/audio/stable/index.html)
+       is a library for audio and signal processing with PyTorch.
+- torchvision: [torchvision](https://pytorch.org/vision/stable/index.html)
+       consists of popular datasets, model architectures, and common image transformations for computer vision.
+- captum: [captum](https://captum.ai)
+        is a model interpretability and understanding library for PyTorch.
+- skorch: [skorch](https://skorch.readthedocs.io/en/stable/)
+        is a scikit-learn compatible neural network library that wraps PyTorch.
+
 ## GitHub Link
 
 The corresponding Dockerfiles and shell scripts are hosted on the following GitHub Repo:
@@ -116,9 +139,9 @@ docker build --build-arg PyVer=3.9 -t ml-base -f ml-base.Dockerfile .
 
 We would tag it to "centos7-python39" for CentOS7-based image with python-3.9, or "alma9-python39" for Alma9-based image with python-3.9. For example
 ```shell
-% docker tag ml-base yesw2000/ml-base:centos7-python39
+% docker tag ml-base yesw2000/ml-base:alma9-python39
 % docker login
-% docker push yesw2000/ml-base:centos7-python39
+% docker push yesw2000/ml-base:alma9-python39
 ```
 
 The above command pushes the image onto [the Docker hub](https://hub.docker.com/) under the personal account of *yesw2000*.
@@ -139,7 +162,7 @@ The ML images are deployed onto both BNL CVMFS and CVMFS-unpacked in Singularity
 The images are **manually** deployed onto BNL CVMFS under */cvmfs/atlas.sdcc.bnl.gov/users/yesw/singularity/* on the machine *cvmfswrite01* at BNL, with the following command:
 
 ```shell
-% singularity build --sandbox --fix-perms -F ml-base:centos7-python38 docker://yesw2000/ml-base:centos7-python38
+% singularity build --sandbox --fix-perms -F ml-base:alma9-python39 docker://yesw2000/ml-base:alma9-python39
 ```
 
 ### Images on CVMFS-Unpacked
@@ -149,10 +172,10 @@ under */cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/*.
 
 ```shell
 % ls /cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000
+ml-base:alma9-python311   ml-pyroot:alma9-python311   ml-tensorflow-cpu:alma9-python311   ml-tensorflow-gpu:alma9-python311   ml-torch-gpu:alma9-python311
 ml-base:alma9-python39    ml-pyroot:alma9-python39    ml-tensorflow-cpu:alma9-python39    ml-tensorflow-gpu:alma9-python39
 ml-base:centos7-python38  ml-pyroot:centos7-python38  ml-tensorflow-cpu:centos7-python38  ml-tensorflow-gpu:centos7-python38
 ml-base:centos7-python39  ml-pyroot:centos7-python39  ml-tensorflow-cpu:centos7-python39  ml-tensorflow-gpu:centos7-python39
-pyroot-atlas:centos7-python39
 ```
 
 ## ML Images in Jupyter
@@ -427,9 +450,9 @@ usage: run-ml_container.sh [options]
   Examples:
 
     source run-ml_container.sh listImages
-    source run-ml_container.sh ml-base:centos7-python39
+    source run-ml_container.sh ml-base:alma9-python39
     source run-ml_container.sh            # Empty arg to rerun the already setup container
-    source run-ml_container.sh setup ml-base:centos7-python39
+    source run-ml_container.sh setup ml-base:alma9-python39
 /pre></blockquote>
 </details>
 

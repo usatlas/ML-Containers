@@ -58,6 +58,7 @@ import ast
 import json
 import pprint
 import re
+import glob
 import subprocess
 
 from shutil import which, rmtree
@@ -75,37 +76,38 @@ URL_API_SELF = "https://api.github.com/repos/%s/commits?path=%s&per_page=100" % 
     GITHUB_REPO, GITHUB_PATH)
 CONTAINER_CMDS = ["podman", "docker", "nerdctl", "apptainer", "singularity"]
 DOCKERHUB_REPO = "https://hub.docker.com/v2/repositories/"
-IMAGE_CENTOS7_PY38 = {
-    "dockerPath": "docker.io/yesw2000/{FullName}",
-    "listURL": "https://raw.githubusercontent.com/usatlas/ML-Containers/main/centos7/{Name}/python38/list-of-pkgs-inside.txt",
-    "cvmfsPath": [
-        "/cvmfs/atlas.sdcc.bnl.gov/users/yesw/singularity/centos7-py38/{Name}",
-        "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/{FullName}"]}
-IMAGE_CENTOS7_PY39 = {
-    "dockerPath": "docker.io/yesw2000/{FullName}",
-    "listURL": "https://raw.githubusercontent.com/usatlas/ML-Containers/main/centos7/{Name}/python39/list-of-pkgs-inside.txt",
-    "cvmfsPath": [
-        "/cvmfs/atlas.sdcc.bnl.gov/users/yesw/singularity/centos7-py39/{Name}",
-        "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/{FullName}"]}
+# IMAGE_CENTOS7_PY39 = {
+#     "dockerPath": "docker.io/yesw2000/{FullName}",
+#     "listURL": "https://raw.githubusercontent.com/usatlas/ML-Containers/main/centos7/{Name}/python39/list-of-pkgs-inside.txt",
+#     "cvmfsPath": [
+#         "/cvmfs/atlas.sdcc.bnl.gov/users/yesw/singularity/centos7-py39/{Name}",
+#         "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/{FullName}"]}
 IMAGE_ALMA9_PY39 = {
     "dockerPath": "docker.io/yesw2000/{FullName}",
     "listURL": "https://raw.githubusercontent.com/usatlas/ML-Containers/main/alma9/{Name}/python39/list-of-pkgs-inside.txt",
     "cvmfsPath": [
         "/cvmfs/atlas.sdcc.bnl.gov/users/yesw/singularity/alma9-py39/{Name}",
         "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/{FullName}"]}
+IMAGE_ALMA9_PY311 = {
+    "dockerPath": "docker.io/yesw2000/{FullName}",
+    "listURL": "https://raw.githubusercontent.com/usatlas/ML-Containers/main/alma9/{Name}/python311/list-of-pkgs-inside.txt",
+    "cvmfsPath": [
+        "/cvmfs/atlas.sdcc.bnl.gov/users/yesw/singularity/alma9-py311/{Name}",
+        "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/yesw2000/{FullName}"]}
 IMAGE_CONFIG = {
-    "ml-base:centos7-python38": IMAGE_CENTOS7_PY38,
-    "ml-pyroot:centos7-python38": IMAGE_CENTOS7_PY38,
-    "ml-tensorflow-cpu:centos7-python38": IMAGE_CENTOS7_PY38,
-    "ml-tensorflow-gpu:centos7-python38": IMAGE_CENTOS7_PY38,
-    "ml-base:centos7-python39": IMAGE_CENTOS7_PY39,
-    "ml-pyroot:centos7-python39": IMAGE_CENTOS7_PY39,
-    "ml-tensorflow-cpu:centos7-python39": IMAGE_CENTOS7_PY39,
-    "ml-tensorflow-gpu:centos7-python39": IMAGE_CENTOS7_PY39,
+#    "ml-base:centos7-python39": IMAGE_CENTOS7_PY39,
+#    "ml-pyroot:centos7-python39": IMAGE_CENTOS7_PY39,
+#    "ml-tensorflow-cpu:centos7-python39": IMAGE_CENTOS7_PY39,
+#    "ml-tensorflow-gpu:centos7-python39": IMAGE_CENTOS7_PY39,
     "ml-base:alma9-python39": IMAGE_ALMA9_PY39,
     "ml-pyroot:alma9-python39": IMAGE_ALMA9_PY39,
     "ml-tensorflow-cpu:alma9-python39": IMAGE_ALMA9_PY39,
     "ml-tensorflow-gpu:alma9-python39": IMAGE_ALMA9_PY39,
+    "ml-base:alma9-python311": IMAGE_ALMA9_PY311,
+    "ml-pyroot:alma9-python311": IMAGE_ALMA9_PY311,
+    "ml-tensorflow-cpu:alma9-python311": IMAGE_ALMA9_PY311,
+    "ml-tensorflow-gpu:alma9-python311": IMAGE_ALMA9_PY311,
+    "ml-torch-gpu:alma9-python311": IMAGE_ALMA9_PY311,
 }
 
 
@@ -137,11 +139,53 @@ def set_default_subparser(parser, default_subparser, index_action=1):
             sys.argv.insert(index_action, default_subparser)
 
 
-def listGPUDevices():
-    import os
-    dev_files = os.listdir('/dev')
-    nvidia_devices = ['/dev/' + f for f in dev_files if f.startswith('nvidia')]
-    return nvidia_devices
+def nvidia_devices_option():
+  """
+  Checks for the existence of /dev/nvidiactl using Python's os module.
+
+  If it exists, finds NVIDIA device files (/dev/nvidia[0-9]*, /dev/nvidiactl,
+  /dev/nvidia-uvm, /dev/nvidia-uvm-tools) and formats them into a single
+  string suitable for command-line arguments (e.g., for Docker).
+
+  Example format: "--device=/dev/nvidia0 --device=/dev/nvidiactl ..."
+
+  If /dev/nvidiactl does not exist, it returns None.
+  If /dev/nvidiactl exists but no devices are found, it returns an empty string.
+
+  Returns:
+      str: A space-separated string of device paths prefixed with '--device=', or
+      str: An empty string if /dev/nvidiactl exists but no devices are found, or
+      None: If /dev/nvidiactl doesn't exist.
+  """
+
+  nvidiactl_path = "/dev/nvidiactl"
+
+  if not os.path.exists(nvidiactl_path):
+    # /dev/nvidiactl does not exist, return None as requested
+    return None
+
+  # /dev/nvidiactl exists, proceed to find devices
+
+  # Use glob to find files matching the pattern /dev/nvidia[0-9]*
+  numbered_devices = glob.glob("/dev/nvidia[0-9]*")
+
+  # Define the specific device files to check for
+  other_devices_to_check = [
+      "/dev/nvidia-uvm",
+      "/dev/nvidia-uvm-tools"
+  ]
+
+  # Check for the existence of each specific device file
+  existing_other_devices = [
+      dev for dev in other_devices_to_check if os.path.exists(dev)
+  ]
+
+  # Combine the lists
+  all_devices = numbered_devices + [nvidiactl_path] + existing_other_devices
+
+  # Format the list into the desired string format
+  formatted_devices = ["--device=%s" % dev for dev in all_devices]
+  return " ".join(formatted_devices)
 
 
 def getUrlContent(url):
@@ -342,11 +386,11 @@ def listPackages(args):
 def listNewPkgs(contCmd, contNamePath, lastLineN):
     history = "/opt/conda/conda-meta/history"
     if contCmd == 'singularity' or contCmd == 'apptainer':
-        grepCmd = 'egrep -n "specs:|cmd:" %s/%s' % (contNamePath, history)
+        grepCmd = 'egrep -n "specs:|cmd:" %s/%s 2>/dev/null' % (contNamePath, history)
     else:
         startCmd = '%s start %s' % (contCmd, contNamePath)
         output = run_shellCmd(startCmd)
-        grepCmd = '%s exec %s egrep -n "specs:|cmd:" %s' % (
+        grepCmd = '%s exec %s egrep -n "specs:|cmd:" %s 2>/dev/null' % (
             contCmd, contNamePath, history)
 
     output = run_shellCmd(grepCmd)
@@ -452,7 +496,7 @@ def write_sandboxSetup(
     lastUpdate = imageInfo["lastUpdate"]
     imageDigest = imageInfo["imageDigest"]
     output = run_shellCmd(
-        "wc -l %s/opt/conda/conda-meta/history" %
+        "wc -l %s/opt/conda/conda-meta/history 2>/dev/null" %
         sandboxPath)
     linesCondaHistory = output.split()[0]
     myScript = os.path.abspath(sys.argv[0])
@@ -498,7 +542,7 @@ def create_container(contCmd, contName, dockerPath, bindOpt, force=False):
         print("!!Warning!! Pulling the image %s failed, exit now" % dockerPath)
         sys.exit(1)
 
-    out = run_shellCmd("%s ps -a -f name='^%s$' " % (contCmd, contName))
+    out = run_shellCmd("%s ps -a -f name='^%s$' 2>/dev/null" % (contCmd, contName))
     if out.find(contName) > 0:
         if force:
             print(
@@ -548,7 +592,7 @@ def write_dockerSetup(
     imageDigest = imageInfo["imageDigest"]
 
     output = run_shellCmd(
-        "%s run --rm %s wc -l /opt/conda/conda-meta/history |tail -1" %
+        "%s run --rm %s wc -l /opt/conda/conda-meta/history 2>/dev/null|tail -1" %
         (contCmd, dockerPath))
     linesCondaHistory = output.split()[0]
 
@@ -746,7 +790,7 @@ def setup(args):
         else:
             runOpt = '-w'
 
-        if imageName.find('gpu') >= 0 and len(listGPUDevices()) > 0:
+        if imageName.find('gpu') >= 0 and len(nvidia_devices_option()) > 0:
             runOpt += ' --nv'
 
         for path in volumes:
@@ -767,10 +811,10 @@ def setup(args):
 
         bindOpt = ''
         if imageName.find('gpu') >= 0:
-            devices = listGPUDevices()
-            if len(devices) > 0:
+            devices_option = nvidia_devices_option()
+            if len(devices_option) > 0:
                 if contCmd == "podman":
-                    bindOpt = '--device=' + ','.join(devices)
+                    bindOpt = devices_option
                 else:
                     bindOpt = '--gpus all'
                 if os.path.exists("/usr/lib64/libcuda.so") and os.path.exists("/usr/lib64/libcuda.so.1"):
@@ -923,14 +967,14 @@ def main():
     example_global = """Examples:
 
   source %s listImages
-  source %s ml-base:centos7-python39
+  source %s ml-base:alma9-python39
   source %s            # Empty arg to rerun the already setup container
-  source %s setup ml-base:centos7-python39""" % (myScript, myScript, myScript, myScript)
+  source %s setup ml-base:alma9-python39""" % (myScript, myScript, myScript, myScript)
 
     example_setup = """Examples:
 
-  source %s ml-base:centos7-python39
-  source %s --sing ml-base:centos7-python39""" % (myScript, myScript)
+  source %s ml-base:alma9-python39
+  source %s --sing ml-base:alma9-python39""" % (myScript, myScript)
 
     parser = argparse.ArgumentParser(
         epilog=example_global,
